@@ -1,9 +1,14 @@
-import { Button } from '@/components/ui/button'
+import { Routes } from './routes/routes'
+import { Navbar } from './components/shared/navbar'
+import { PageWrapper } from './components/shared/pageWrapper'
 
 export const App = () => {
   return (
-    <div className="flex min-h-svh flex-col items-center justify-center">
-      <Button>Click me</Button>
-    </div>
+    <>
+      <Navbar />
+      <PageWrapper>
+        <Routes />
+      </PageWrapper>
+    </>
   )
 }
