@@ -2,7 +2,7 @@ import { useState } from 'react'
 import * as ort from 'onnxruntime-web'
 import { preprocessDigitCanvas } from '@/lib/preprocessDigitCanvas'
 import { useOnnxModelRunner } from './useOnnxModelRunner'
-import type { DigitModelResult } from '@/types/digitModelrESULT'
+import type { DigitModelResult } from '@/types/digitModelresult'
 
 export const useOnnxDigitModel = (): DigitModelResult => {
   const { session, ready, loadingModel } = useOnnxModelRunner({
