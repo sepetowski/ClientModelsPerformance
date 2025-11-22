@@ -13,7 +13,11 @@ export default defineConfig({
       targets: [
         {
           src: 'node_modules/@tensorflow/tfjs-backend-wasm/dist/*.wasm',
-          dest: 'public/wasm',
+          dest: 'public/wasm/tfjs',
+        },
+        {
+          src: 'node_modules/onnxruntime-web/dist/*.wasm',
+          dest: 'public/wasm/onxx',
         },
       ],
     }),

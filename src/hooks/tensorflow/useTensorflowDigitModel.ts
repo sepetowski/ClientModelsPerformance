@@ -3,11 +3,9 @@ import * as tf from '@tensorflow/tfjs'
 import type { TensorFlowBackendType } from '@/types/tensorFlowBackend'
 import { preprocessDigitCanvas } from '@/lib/preprocessDigitCanvas'
 import { useTensorflowModelRunner } from './useTensorflowModelRunner'
-import type { UseTensorflowDigitModelResult } from '@/types/tensorflowDigitModel'
+import type { DigitModelResult } from '@/types/digitModelresult'
 
-export const useTensorflowDigitModel = (
-  backend: TensorFlowBackendType
-): UseTensorflowDigitModelResult => {
+export const useTensorflowDigitModel = (backend: TensorFlowBackendType): DigitModelResult => {
   const { model, backendReady, loadingModel } = useTensorflowModelRunner({
     backend,
     modelUrl: '/models/tensorflowjs/digit/model.json',
@@ -23,18 +21,17 @@ export const useTensorflowDigitModel = (
     setPredicting(true)
 
     try {
-      const imgData = preprocessDigitCanvas(canvas)
-      if (!imgData) {
-        console.log('Brak rysunku (pusty bounding box)')
+      const processed = preprocessDigitCanvas(canvas)
+      if (!processed) {
+        console.log('Empty drawing (no bounding box)')
         setPrediction(null)
         return null
       }
 
+      const { data, width, height } = processed
+
       const input = tf.tidy(() => {
-        let x = tf.browser.fromPixels(imgData, 1).toFloat().div(255)
-        x = tf.sub(1, x)
-        x = x.greater(0.2).cast('float32')
-        return x.reshape([1, 28, 28, 1])
+        return tf.tensor4d(data, [1, height, width, 1])
       })
 
       const output = model.predict(input) as tf.Tensor
@@ -64,7 +61,7 @@ export const useTensorflowDigitModel = (
   }
 
   return {
-    backendReady,
+    ready: backendReady,
     loadingModel,
     predicting,
     prediction,

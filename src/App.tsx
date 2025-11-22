@@ -4,8 +4,7 @@ import { PageWrapper } from './components/shared/pageWrapper'
 import { setWasmPaths } from '@tensorflow/tfjs-backend-wasm'
 
 export const App = () => {
-  setWasmPaths('/wasm/')
-
+  setWasmPaths('/wasm/tfjs/')
   return (
     <>
       <Navbar />
