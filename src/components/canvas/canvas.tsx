@@ -1,4 +1,6 @@
-import { useRef, useState, useCallback, useEffect } from 'react'
+// src/components/canvas/Canvas.tsx
+
+import { useRef, useState, useCallback, useEffect, type RefObject } from 'react'
 import { Toolbar } from './toolbar'
 import { useCanvasDrawing } from '@/hooks/useCanvasDrawing'
 import { useCanvasHistory } from '@/hooks/useCanvasHistory'
@@ -13,6 +15,7 @@ interface Props {
   initialSize?: number
   className?: string
   height?: number
+  canvasRefExternal?: RefObject<HTMLCanvasElement | null>
 }
 
 export const Canvas = ({
@@ -21,8 +24,11 @@ export const Canvas = ({
   initialSize = 8,
   className = '',
   height = 520,
+  canvasRefExternal,
 }: Props) => {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const internalCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  const canvasRef = canvasRefExternal ?? internalCanvasRef
+
   const wrapperRef = useRef<HTMLDivElement | null>(null)
 
   const [brushColor, setBrushColor] = useState(initialColor)
@@ -46,7 +52,7 @@ export const Canvas = ({
       if (!canvas || !wrapper) return
       resizeCanvas(canvas, wrapper as HTMLDivElement, background, height, preserve)
     },
-    [background, height]
+    [background, height, canvasRef]
   )
 
   useEffect(() => {
@@ -104,15 +110,6 @@ export const Canvas = ({
           onPointerLeave={endStroke}
         />
       </div>
-
-      <div className="mt-3 text-xs text-muted-foreground flex flex-wrap gap-x-6 gap-y-1">
-        <span>
-          Tip: Hold <kbd className="px-1 border rounded">Ctrl</kbd>/
-          <kbd className="px-1 border rounded">⌘</kbd> +{' '}
-          <kbd className="px-1 border rounded">Z</kbd> to undo.
-        </span>
-      </div>
-
       <SaveDialog open={saveOpen} onOpenChange={setSaveOpen} onConfirm={handleConfirmSave} />
     </div>
   )

@@ -1,5 +1,5 @@
 import { Home } from '@/pages/home'
-import { CanvasPage } from '@/pages/canvas'
+import { DigitPage } from '@/pages/digit'
 import type { JSX } from 'react'
 
 export interface AppRoute {
@@ -15,8 +15,8 @@ export const appRoutes: AppRoute[] = [
     element: <Home />,
   },
   {
-    path: '/canvas',
-    name: 'Canvas',
-    element: <CanvasPage />,
+    path: '/digit',
+    name: 'Digit',
+    element: <DigitPage />,
   },
 ]
