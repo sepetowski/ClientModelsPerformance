@@ -1,6 +1,12 @@
-// src/lib/preprocessDigitCanvas.ts
+export interface PreprocessedDigitCanvas {
+  width: number
+  height: number
+  data: Float32Array
+}
 
-export const preprocessDigitCanvas = (canvas: HTMLCanvasElement | null): ImageData | null => {
+export const preprocessDigitCanvas = (
+  canvas: HTMLCanvasElement | null
+): PreprocessedDigitCanvas | null => {
   if (!canvas) return null
 
   const srcCtx = canvas.getContext('2d')
@@ -9,11 +15,9 @@ export const preprocessDigitCanvas = (canvas: HTMLCanvasElement | null): ImageDa
   const srcW = canvas.width
   const srcH = canvas.height
 
-  // 1. Pobieramy piksele z dużego canvasa
   const srcImage = srcCtx.getImageData(0, 0, srcW, srcH)
-  const data = srcImage.data // RGBA, 0..255
+  const data = srcImage.data // RGBA
 
-  // 2. Szukamy bounding-boxa "ciemnych" pikseli (tam jest cyfra)
   let minX = srcW
   let minY = srcH
   let maxX = -1
@@ -26,10 +30,8 @@ export const preprocessDigitCanvas = (canvas: HTMLCanvasElement | null): ImageDa
       const g = data[idx + 1]
       const b = data[idx + 2]
 
-      // jasne tło ~ białe, ciemna kreska = mniejsze wartości
-      const gray = (r + g + b) / (3 * 255) // 0..1
+      const gray = (r + g + b) / (3 * 255)
       if (gray < 0.9) {
-        // piksel "nie-biały"
         if (x < minX) minX = x
         if (x > maxX) maxX = x
         if (y < minY) minY = y
@@ -38,12 +40,10 @@ export const preprocessDigitCanvas = (canvas: HTMLCanvasElement | null): ImageDa
     }
   }
 
-  // 3. Jeśli nic nie znaleziono – nie ma cyfry
   if (maxX < 0 || maxY < 0) {
     return null
   }
 
-  // Dodajemy mały margines
   const margin = 10
   minX = Math.max(minX - margin, 0)
   minY = Math.max(minY - margin, 0)
@@ -53,37 +53,45 @@ export const preprocessDigitCanvas = (canvas: HTMLCanvasElement | null): ImageDa
   const boxW = maxX - minX + 1
   const boxH = maxY - minY + 1
 
-  // 4. Tworzymy tymczasowy canvas 28x28
+  const TMP_SIZE = 28
   const tmp = document.createElement('canvas')
-  tmp.width = 28
-  tmp.height = 28
+  tmp.width = TMP_SIZE
+  tmp.height = TMP_SIZE
   const tctx = tmp.getContext('2d')
   if (!tctx) return null
 
-  // białe tło
   tctx.fillStyle = '#ffffff'
-  tctx.fillRect(0, 0, 28, 28)
+  tctx.fillRect(0, 0, TMP_SIZE, TMP_SIZE)
 
-  // 5. Przeskalowujemy bounding box do max 20x20, wycentrowany
   const maxDigitSize = 20
   const scale = maxDigitSize / Math.max(boxW, boxH)
   const dstW = boxW * scale
   const dstH = boxH * scale
-  const dx = (28 - dstW) / 2
-  const dy = (28 - dstH) / 2
+  const dx = (TMP_SIZE - dstW) / 2
+  const dy = (TMP_SIZE - dstH) / 2
 
-  tctx.drawImage(
-    canvas,
-    minX,
-    minY,
-    boxW,
-    boxH, // źródło (bbox)
-    dx,
-    dy,
-    dstW,
-    dstH // cel (wycentrowane)
-  )
+  tctx.drawImage(canvas, minX, minY, boxW, boxH, dx, dy, dstW, dstH)
 
-  // 6. Zwracamy gotowe 28x28
-  return tctx.getImageData(0, 0, 28, 28)
+  const imgData = tctx.getImageData(0, 0, TMP_SIZE, TMP_SIZE)
+  const out = new Float32Array(TMP_SIZE * TMP_SIZE)
+  const d = imgData.data
+
+  for (let y = 0; y < TMP_SIZE; y++) {
+    for (let x = 0; x < TMP_SIZE; x++) {
+      const idx = (y * TMP_SIZE + x) * 4
+      const r = d[idx]
+      const g = d[idx + 1]
+      const b = d[idx + 2]
+
+      const gray = (r + g + b) / (3 * 255)
+      const inv = 1 - gray
+      out[y * TMP_SIZE + x] = inv > 0.2 ? 1 : 0
+    }
+  }
+
+  return {
+    width: TMP_SIZE,
+    height: TMP_SIZE,
+    data: out,
+  }
 }
