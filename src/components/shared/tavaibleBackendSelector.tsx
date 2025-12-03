@@ -1,4 +1,3 @@
-import { TENSORFLOW_BACKEND_OPTIONS } from '@/const/tensorFlowBackend'
 import {
   Select,
   SelectContent,
@@ -7,36 +6,37 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { twMerge } from 'tailwind-merge'
-import type { TensorFlowBackendType } from '@/types/tensorFlowBackend'
+import type { AvaibleBackendType } from '@/types/avaibleBackend'
+import { AVAIBLE_BACKENDS_OPTIONS } from '@/const/avaibleBackends'
 
-interface TensorFlowBackendSelectorProps {
-  backend: TensorFlowBackendType
-  onChange: (backend: TensorFlowBackendType) => void
+interface AvaibleSelectorProps {
+  backend: AvaibleBackendType
+  onChange: (backend: AvaibleBackendType) => void
   disabled?: boolean
   className?: string
   label?: string
 }
 
-export const TensorFlowBackendSelector = ({
+export const AvaibleBackendSelector = ({
   backend,
   onChange,
   disabled = false,
   className = '',
   label = 'Backend',
-}: TensorFlowBackendSelectorProps) => {
+}: AvaibleSelectorProps) => {
   return (
     <div className={twMerge('flex items-center gap-3 text-xs text-muted-foreground', className)}>
       <span>{label}:</span>
       <Select
         value={backend}
-        onValueChange={(value) => onChange(value as TensorFlowBackendType)}
+        onValueChange={(value) => onChange(value as AvaibleBackendType)}
         disabled={disabled}
       >
         <SelectTrigger className="w-[140px] h-8">
-          <SelectValue placeholder="Wybierz backend" />
+          <SelectValue placeholder="Choose backend" />
         </SelectTrigger>
         <SelectContent>
-          {TENSORFLOW_BACKEND_OPTIONS.map((opt) => (
+          {AVAIBLE_BACKENDS_OPTIONS.map((opt) => (
             <SelectItem key={opt.value} value={opt.value}>
               {opt.label}
             </SelectItem>
