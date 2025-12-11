@@ -1,23 +1,20 @@
 import { useState } from 'react'
-import * as tf from '@tensorflow/tfjs'
 import { preprocessDigitCanvas } from '@/lib/preprocessDigitCanvas'
-import { useTensorflowModelRunner } from './useTensorflowModelRunner'
+import { useWebDnnModelRunner } from './useWebDnnModelRunner'
 import type { DigitModelResult } from '@/types/digitModelresult'
-import type { AvaibleTensorflowBackendType } from '@/types/avaibleBackend'
+import type { AvaibleBackendType } from '@/types/avaibleBackend'
 
-export const useTensorflowDigitModel = (
-  backend: AvaibleTensorflowBackendType
-): DigitModelResult => {
-  const { model, backendReady, loadingModel } = useTensorflowModelRunner({
+export const useWebDnnDigitModel = (backend: AvaibleBackendType): DigitModelResult => {
+  const { runner, backendReady, loadingModel } = useWebDnnModelRunner({
     backend,
-    modelUrl: '/models/tensorflowjs/digit/model.json',
+    modelDir: '/models/onxx/digit/',
   })
 
   const [predicting, setPredicting] = useState(false)
   const [prediction, setPrediction] = useState<number | null>(null)
 
-  const predictFromCanvas = async (canvas: HTMLCanvasElement | null): Promise<number | null> => {
-    if (!model) return null
+  const predictFromCanvas = async (canvas: HTMLCanvasElement | null) => {
+    if (!runner) return null
     if (!canvas) return null
 
     setPredicting(true)
@@ -31,16 +28,10 @@ export const useTensorflowDigitModel = (
       }
 
       const { data, width, height } = processed
+      const inputTensor = new WebDNN.CPUTensor([1, height, width, 1], 'float32', data)
 
-      const input = tf.tidy(() => {
-        return tf.tensor4d(data, [1, height, width, 1])
-      })
-
-      const output = model.predict(input) as tf.Tensor
-      const probs = (await output.data()) as Float32Array
-
-      input.dispose()
-      output.dispose()
+      const [output] = await runner.run([inputTensor])
+      const probs = output.data as Float32Array
 
       let maxIdx = 0
       let maxVal = probs[0]
@@ -52,10 +43,9 @@ export const useTensorflowDigitModel = (
       }
 
       setPrediction(maxIdx)
-      console.log('TF probs:', probs, 'TF prediction:', maxIdx)
       return maxIdx
     } catch (e) {
-      console.error('Error during TF prediction', e)
+      console.error('Error during WebDNN prediction', e)
       return null
     } finally {
       setPredicting(false)
