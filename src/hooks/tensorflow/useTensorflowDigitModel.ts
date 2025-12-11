@@ -3,9 +3,11 @@ import * as tf from '@tensorflow/tfjs'
 import { preprocessDigitCanvas } from '@/lib/preprocessDigitCanvas'
 import { useTensorflowModelRunner } from './useTensorflowModelRunner'
 import type { DigitModelResult } from '@/types/digitModelresult'
-import type { AvaibleBackendType } from '@/types/avaibleBackend'
+import type { AvaibleTensorflowBackendType } from '@/types/avaibleBackend'
 
-export const useTensorflowDigitModel = (backend: AvaibleBackendType): DigitModelResult => {
+export const useTensorflowDigitModel = (
+  backend: AvaibleTensorflowBackendType
+): DigitModelResult => {
   const { model, backendReady, loadingModel } = useTensorflowModelRunner({
     backend,
     modelUrl: '/models/tensorflowjs/digit/model.json',

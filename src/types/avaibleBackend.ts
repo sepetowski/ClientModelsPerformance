@@ -1,3 +1,7 @@
-import type { AVAIBLE_BACKENDS } from '@/const/avaibleBackends'
+import type { AVAIBLE_WEBDNN_BACKENDS } from '@/const/avaibleWebdnnBackends'
+import type { AVAIBLE_TENSORFLOW_BACKENDS } from '@/const/avaibleTensorflowBackends'
 
-export type AvaibleBackendType = (typeof AVAIBLE_BACKENDS)[keyof typeof AVAIBLE_BACKENDS]
+export type AvaibleWebdnnBackendType =
+  (typeof AVAIBLE_WEBDNN_BACKENDS)[keyof typeof AVAIBLE_WEBDNN_BACKENDS]
+export type AvaibleTensorflowBackendType =
+  (typeof AVAIBLE_TENSORFLOW_BACKENDS)[keyof typeof AVAIBLE_TENSORFLOW_BACKENDS]

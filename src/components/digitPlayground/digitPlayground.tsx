@@ -1,18 +1,25 @@
 import { useRef, useState } from 'react'
 import { Canvas } from '@/components/canvas/canvas'
-import { AVAIBLE_BACKENDS } from '@/const/avaibleBackends'
-import type { AvaibleBackendType } from '@/types/avaibleBackend'
+import type { AvaibleTensorflowBackendType, AvaibleWebdnnBackendType } from '@/types/avaibleBackend'
 import { WasmOnlySupport } from '../badges/WasmOnlySupport'
-
 import { useTensorflowDigitModel } from '@/hooks/tensorflow/useTensorflowDigitModel'
 import { useOnnxDigitModel } from '@/hooks/onxx/useOnnxDigitModel'
 import { useWebDnnDigitModel } from '@/hooks/webDnn/useWebDnnDigitModel'
-import { AvaibleBackendSelector } from '../shared/tavaibleBackendSelector'
+import { AvaibleTensorflowBackendSelector } from '../shared/avaibleTensorflowBackendSelector'
+import { AVAIBLE_WEBDNN_BACKENDS } from '@/const/avaibleWebdnnBackends'
+import { AVAIBLE_TENSORFLOW_BACKENDS } from '@/const/avaibleTensorflowBackends'
+import { AvaibleWebdnnBackendSelector } from '../shared/avaibleWebdnnBackendSelector copy'
 
 export const DigitPlayground = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
 
-  const [backend, setBackend] = useState<AvaibleBackendType>(AVAIBLE_BACKENDS.WASM)
+  const [tensorflowbackend, setTensorflowBackend] = useState<AvaibleTensorflowBackendType>(
+    AVAIBLE_TENSORFLOW_BACKENDS.CPU
+  )
+
+  const [webdnnBackend, setWebdnnBackend] = useState<AvaibleWebdnnBackendType>(
+    AVAIBLE_WEBDNN_BACKENDS.CPU
+  )
 
   const {
     ready: tfReady,
@@ -20,7 +27,15 @@ export const DigitPlayground = () => {
     predicting: tfPredicting,
     prediction: tfPrediction,
     predictFromCanvas: tfPredictFromCanvas,
-  } = useTensorflowDigitModel(backend)
+  } = useTensorflowDigitModel(tensorflowbackend)
+
+  const {
+    ready: webdnnReady,
+    loadingModel: webdnnLoading,
+    predicting: webdnnPredicting,
+    prediction: webdnnPrediction,
+    predictFromCanvas: webdnnPredictFromCanvas,
+  } = useWebDnnDigitModel(webdnnBackend)
 
   const {
     ready: onnxReady,
@@ -29,14 +44,6 @@ export const DigitPlayground = () => {
     prediction: onnxPrediction,
     predictFromCanvas: onnxPredictFromCanvas,
   } = useOnnxDigitModel()
-
-  const {
-    ready: webdnnReady,
-    loadingModel: webdnnLoading,
-    predicting: webdnnPredicting,
-    prediction: webdnnPrediction,
-    predictFromCanvas: webdnnPredictFromCanvas,
-  } = useWebDnnDigitModel(backend)
 
   const [runningAll, setRunningAll] = useState(false)
 
@@ -90,9 +97,15 @@ export const DigitPlayground = () => {
       <section className="rounded-xl border bg-background/60 p-4 shadow-sm">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="flex flex-wrap items-center gap-3">
-            <AvaibleBackendSelector
-              backend={backend}
-              onChange={setBackend}
+            <AvaibleTensorflowBackendSelector
+              backend={tensorflowbackend}
+              onChange={setTensorflowBackend}
+              disabled={tfPredicting || runningAll || tfLoading}
+              className="min-w-[220px]"
+            />
+            <AvaibleWebdnnBackendSelector
+              backend={webdnnBackend}
+              onChange={setWebdnnBackend}
               disabled={tfPredicting || runningAll || tfLoading}
               className="min-w-[220px]"
             />
@@ -165,7 +178,7 @@ export const DigitPlayground = () => {
 
       <section className="rounded-xl border bg-background/60 p-4 shadow-sm">
         <h2 className="mb-3 text-sm font-medium text-muted-foreground">Drawing canvas</h2>
-        <div className="overflow-hidden rounded-lg border bg-card">
+        <div className="overflow-hidden rounded-lg bg-card">
           <Canvas
             canvasRefExternal={canvasRef}
             className="mt-0"
