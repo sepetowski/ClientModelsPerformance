@@ -85,7 +85,7 @@ export const preprocessDigitCanvas = (
 
       const gray = (r + g + b) / (3 * 255)
       const inv = 1 - gray
-      out[y * TMP_SIZE + x] = inv > 0.2 ? 1 : 0
+      out[y * TMP_SIZE + x] = inv
     }
   }
 

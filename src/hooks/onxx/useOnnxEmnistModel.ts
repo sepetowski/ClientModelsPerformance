@@ -1,20 +1,40 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import * as ort from 'onnxruntime-web'
 import { preprocessDigitCanvas } from '@/lib/preprocessDigitCanvas'
 import { useOnnxModelRunner } from './useOnnxModelRunner'
-import type { DigitModelResult } from '@/types/digitModelresult'
+import type { EmnistModelResult } from '@/types/emnistModelResult'
 
-export const useOnnxDigitModel = (): DigitModelResult => {
+export const useOnnxEmnistModel = (): EmnistModelResult => {
   const { session, ready, loadingModel } = useOnnxModelRunner({
-    modelUrl: '/models/onxx/digit/model.onnx',
+    modelUrl: '/models/onxx/emnist/model.onnx',
   })
 
+  const [labels, setLabels] = useState<string[]>([])
   const [predicting, setPredicting] = useState(false)
-  const [prediction, setPrediction] = useState<number | null>(null)
+  const [prediction, setPrediction] = useState<string | null>(null)
 
-  const predictFromCanvas = async (canvas: HTMLCanvasElement | null): Promise<number | null> => {
-    if (!session) return null
-    if (!canvas) return null
+  useEffect(() => {
+    const loadLabels = async () => {
+      try {
+        const res = await fetch('/labels/emnist/labels.txt')
+        const text = await res.text()
+        const parsed = text
+          .split(/\r?\n/)
+          .map((l) => l.trim())
+          .filter(Boolean)
+
+        setLabels(parsed)
+      } catch (err) {
+        console.error('Failed to load EMNIST labels', err)
+        setLabels([])
+      }
+    }
+
+    loadLabels()
+  }, [])
+
+  const predictFromCanvas = async (canvas: HTMLCanvasElement | null): Promise<string | null> => {
+    if (!session || !canvas || labels.length === 0) return null
 
     setPredicting(true)
 
@@ -29,7 +49,7 @@ export const useOnnxDigitModel = (): DigitModelResult => {
       const { data, width, height } = processed
       const inputName = session.inputNames[0]
 
-      //[1, 28, 28, 1]
+      // [1, 28, 28, 1]
       const inputTensor = new ort.Tensor('float32', data, [1, height, width, 1])
 
       const feeds: Record<string, ort.Tensor> = {
@@ -50,9 +70,11 @@ export const useOnnxDigitModel = (): DigitModelResult => {
         }
       }
 
-      setPrediction(maxIdx)
-      console.log('ONNX probs:', probs, 'ONNX prediction:', maxIdx)
-      return maxIdx
+      const label = labels[maxIdx] ?? null
+      setPrediction(label)
+
+      console.log('ONNX index:', maxIdx, 'Label:', label)
+      return label
     } catch (e) {
       console.error('Error during ONNX prediction', e)
       return null
@@ -62,7 +84,7 @@ export const useOnnxDigitModel = (): DigitModelResult => {
   }
 
   return {
-    ready,
+    ready: ready && labels.length > 0,
     loadingModel,
     predicting,
     prediction,

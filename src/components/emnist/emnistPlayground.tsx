@@ -2,15 +2,15 @@ import { useRef, useState } from 'react'
 import { Canvas } from '@/components/canvas/canvas'
 import type { AvaibleTensorflowBackendType, AvaibleWebdnnBackendType } from '@/types/avaibleBackend'
 import { WasmOnlySupport } from '../badges/WasmOnlySupport'
-import { useTensorflowDigitModel } from '@/hooks/tensorflow/useTensorflowDigitModel'
-import { useOnnxDigitModel } from '@/hooks/onxx/useOnnxDigitModel'
-import { useWebDnnDigitModel } from '@/hooks/webDnn/useWebDnnDigitModel'
 import { AvaibleTensorflowBackendSelector } from '../shared/avaibleTensorflowBackendSelector'
 import { AVAIBLE_WEBDNN_BACKENDS } from '@/const/avaibleWebdnnBackends'
 import { AVAIBLE_TENSORFLOW_BACKENDS } from '@/const/avaibleTensorflowBackends'
 import { AvaibleWebdnnBackendSelector } from '../shared/avaibleWebdnnBackendSelector copy'
+import { useTensorflowEmnistModel } from '@/hooks/tensorflow/useTensorflowEmnistModel'
+import { useWebDnnEmnistModel } from '@/hooks/webDnn/useWebDnnEmnistModel'
+import { useOnnxEmnistModel } from '@/hooks/onxx/useOnnxEmnistModel'
 
-export const DigitPlayground = () => {
+export const Emnist = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
 
   const [tensorflowbackend, setTensorflowBackend] = useState<AvaibleTensorflowBackendType>(
@@ -27,7 +27,7 @@ export const DigitPlayground = () => {
     predicting: tfPredicting,
     prediction: tfPrediction,
     predictFromCanvas: tfPredictFromCanvas,
-  } = useTensorflowDigitModel(tensorflowbackend)
+  } = useTensorflowEmnistModel(tensorflowbackend)
 
   const {
     ready: webdnnReady,
@@ -35,7 +35,7 @@ export const DigitPlayground = () => {
     predicting: webdnnPredicting,
     prediction: webdnnPrediction,
     predictFromCanvas: webdnnPredictFromCanvas,
-  } = useWebDnnDigitModel(webdnnBackend)
+  } = useWebDnnEmnistModel(webdnnBackend)
 
   const {
     ready: onnxReady,
@@ -43,7 +43,7 @@ export const DigitPlayground = () => {
     predicting: onnxPredicting,
     prediction: onnxPrediction,
     predictFromCanvas: onnxPredictFromCanvas,
-  } = useOnnxDigitModel()
+  } = useOnnxEmnistModel()
 
   const [runningAll, setRunningAll] = useState(false)
 
@@ -79,7 +79,7 @@ export const DigitPlayground = () => {
   } else if (runningAll || tfPredicting || onnxPredicting || webdnnPredicting) {
     buttonLabel = 'Running...'
   } else {
-    buttonLabel = 'Recognize digit (TF + ONNX + WebDNN)'
+    buttonLabel = 'Recognize (TF + ONNX + WebDNN)'
   }
 
   const allPredicted = tfPrediction !== null && onnxPrediction !== null && webdnnPrediction !== null
@@ -87,10 +87,10 @@ export const DigitPlayground = () => {
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Digit playground</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Emnist model benchmark</h1>
         <p className="text-sm text-muted-foreground">
-          Draw a digit on the canvas, then compare predictions from TensorFlow, ONNX and WebDNN
-          models in the browser.
+          Draw digit (0-9) or letter (a-z/A-Z) on the canvas, then compare predictions from
+          TensorFlow, ONNX and WebDNN models in the browser.
         </p>
       </header>
 
@@ -146,8 +146,7 @@ export const DigitPlayground = () => {
               onnxReady &&
               webdnnReady && (
                 <span className="text-xs text-muted-foreground">
-                  Draw a digit and click &quot;Recognize digit (TF + ONNX + WebDNN)&quot; to run
-                  predictions.
+                  Draw and click &quot;Recognize (TF + ONNX + WebDNN)&quot; to run predictions.
                 </span>
               )}
           </div>
