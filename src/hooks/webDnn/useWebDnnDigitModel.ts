@@ -2,9 +2,9 @@ import { useState } from 'react'
 import { preprocessDigitCanvas } from '@/lib/preprocessDigitCanvas'
 import { useWebDnnModelRunner } from './useWebDnnModelRunner'
 import type { DigitModelResult } from '@/types/digitModelresult'
-import type { AvaibleBackendType } from '@/types/avaibleBackend'
+import type { AvaibleWebdnnBackendType } from '@/types/avaibleBackend'
 
-export const useWebDnnDigitModel = (backend: AvaibleBackendType): DigitModelResult => {
+export const useWebDnnDigitModel = (backend: AvaibleWebdnnBackendType): DigitModelResult => {
   const { runner, backendReady, loadingModel } = useWebDnnModelRunner({
     backend,
     modelDir: '/models/onxx/digit/',
