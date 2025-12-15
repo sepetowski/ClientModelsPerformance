@@ -1,49 +1,66 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import * as tf from '@tensorflow/tfjs'
 import { preprocessDigitCanvas } from '@/lib/preprocessDigitCanvas'
 import { useTensorflowModelRunner } from './useTensorflowModelRunner'
-import type { DigitModelResult } from '@/types/digitModelresult'
 import type { AvaibleTensorflowBackendType } from '@/types/avaibleBackend'
+import type { EmnistModelResult } from '@/types/emnistModelResult'
 
-export const useTensorflowDigitModel = (
+export const useTensorflowEmnistModel = (
   backend: AvaibleTensorflowBackendType
-): DigitModelResult => {
+): EmnistModelResult => {
   const { model, backendReady, loadingModel } = useTensorflowModelRunner({
     backend,
-    modelUrl: '/models/tensorflowjs/digit/model.json',
+    modelUrl: '/models/tensorflowjs/emnist/model.json',
   })
 
+  const [labels, setLabels] = useState<string[]>([])
   const [predicting, setPredicting] = useState(false)
-  const [prediction, setPrediction] = useState<number | null>(null)
+  const [prediction, setPrediction] = useState<string | null>(null)
 
-  const predictFromCanvas = async (canvas: HTMLCanvasElement | null): Promise<number | null> => {
-    if (!model) return null
-    if (!canvas) return null
+  useEffect(() => {
+    const loadLabels = async () => {
+      try {
+        const res = await fetch('/labels/emnist/labels.txt')
+        const text = await res.text()
+        const parsed = text
+          .split('\n')
+          .map((l) => l.trim())
+          .filter(Boolean)
+
+        setLabels(parsed)
+      } catch (err) {
+        console.error('Failed to load EMNIST labels', err)
+      }
+    }
+
+    loadLabels()
+  }, [])
+
+  const predictFromCanvas = async (canvas: HTMLCanvasElement | null): Promise<string | null> => {
+    if (!model || !canvas || labels.length === 0) return null
 
     setPredicting(true)
 
     try {
       const processed = preprocessDigitCanvas(canvas)
       if (!processed) {
-        console.log('Empty drawing (no bounding box)')
         setPrediction(null)
         return null
       }
 
       const { data, width, height } = processed
 
-      const input = tf.tidy(() => {
-        return tf.tensor4d(data, [1, height, width, 1])
-      })
+      const input = tf.tidy(() => tf.tensor4d(data, [1, height, width, 1]))
 
       const output = model.predict(input) as tf.Tensor
-      const probs = (await output.data()) as Float32Array
+      const probs = await output.data()
 
       input.dispose()
       output.dispose()
 
       let maxIdx = 0
       let maxVal = probs[0]
+
       for (let i = 1; i < probs.length; i++) {
         if (probs[i] > maxVal) {
           maxVal = probs[i]
@@ -51,9 +68,12 @@ export const useTensorflowDigitModel = (
         }
       }
 
-      setPrediction(maxIdx)
-      console.log('TF probs:', probs, 'TF prediction:', maxIdx)
-      return maxIdx
+      const label = labels[maxIdx] ?? null
+
+      setPrediction(label)
+      console.log('TF index:', maxIdx, 'Label:', label)
+
+      return label
     } catch (e) {
       console.error('Error during TF prediction', e)
       return null

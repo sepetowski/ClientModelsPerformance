@@ -1,21 +1,41 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { preprocessDigitCanvas } from '@/lib/preprocessDigitCanvas'
 import { useWebDnnModelRunner } from './useWebDnnModelRunner'
-import type { DigitModelResult } from '@/types/digitModelresult'
 import type { AvaibleWebdnnBackendType } from '@/types/avaibleBackend'
+import type { EmnistModelResult } from '@/types/emnistModelResult'
 
-export const useWebDnnDigitModel = (backend: AvaibleWebdnnBackendType): DigitModelResult => {
+export const useWebDnnEmnistModel = (backend: AvaibleWebdnnBackendType): EmnistModelResult => {
   const { runner, backendReady, loadingModel } = useWebDnnModelRunner({
     backend,
-    modelDir: '/models/onxx/digit/',
+    modelDir: '/models/onxx/emnist/',
   })
 
+  const [labels, setLabels] = useState<string[]>([])
   const [predicting, setPredicting] = useState(false)
-  const [prediction, setPrediction] = useState<number | null>(null)
+  const [prediction, setPrediction] = useState<string | null>(null)
 
-  const predictFromCanvas = async (canvas: HTMLCanvasElement | null) => {
-    if (!runner) return null
-    if (!canvas) return null
+  useEffect(() => {
+    const loadLabels = async () => {
+      try {
+        const res = await fetch('/labels/emnist/labels.txt')
+        const text = await res.text()
+        const parsed = text
+          .split(/\r?\n/)
+          .map((l) => l.trim())
+          .filter(Boolean)
+
+        setLabels(parsed)
+      } catch (err) {
+        console.error('Failed to load EMNIST labels', err)
+        setLabels([])
+      }
+    }
+
+    loadLabels()
+  }, [])
+
+  const predictFromCanvas = async (canvas: HTMLCanvasElement | null): Promise<string | null> => {
+    if (!runner || !canvas || labels.length === 0) return null
 
     setPredicting(true)
 
@@ -42,8 +62,9 @@ export const useWebDnnDigitModel = (backend: AvaibleWebdnnBackendType): DigitMod
         }
       }
 
-      setPrediction(maxIdx)
-      return maxIdx
+      const label = labels[maxIdx] ?? null
+      setPrediction(label)
+      return label
     } catch (e) {
       console.error('Error during WebDNN prediction', e)
       return null
@@ -53,7 +74,7 @@ export const useWebDnnDigitModel = (backend: AvaibleWebdnnBackendType): DigitMod
   }
 
   return {
-    ready: backendReady,
+    ready: backendReady && labels.length > 0,
     loadingModel,
     predicting,
     prediction,

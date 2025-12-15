@@ -1,5 +1,5 @@
+import { EmnistPage } from '@/pages/emnist'
 import { Home } from '@/pages/home'
-import { DigitPage } from '@/pages/digit'
 import type { JSX } from 'react'
 
 export interface AppRoute {
@@ -15,8 +15,8 @@ export const appRoutes: AppRoute[] = [
     element: <Home />,
   },
   {
-    path: '/digit',
-    name: 'Digit',
-    element: <DigitPage />,
+    path: '/emnist',
+    name: 'Emnist',
+    element: <EmnistPage />,
   },
 ]
