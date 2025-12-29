@@ -17,7 +17,6 @@ export const useTensorflowModelRunner = (
   const [backendReady, setBackendReady] = useState(false)
   const [loadingModel, setLoadingModel] = useState(false)
 
-  // 1. Backend
   useEffect(() => {
     let cancelled = false
 
@@ -45,7 +44,6 @@ export const useTensorflowModelRunner = (
     }
   }, [backend])
 
-  // 2. Model
   useEffect(() => {
     if (!backendReady) return
 
@@ -58,14 +56,12 @@ export const useTensorflowModelRunner = (
 
         if (tf.getBackend() !== backend) return
 
-        // z cache
         if (modelCache.has(cacheKey)) {
           const cached = modelCache.get(cacheKey)!
           if (!cancelled) setModel(cached)
           return
         }
 
-        // z sieci
         const m = await tf.loadLayersModel(modelUrl)
         modelCache.set(cacheKey, m)
         if (!cancelled) setModel(m)

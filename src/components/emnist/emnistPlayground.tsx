@@ -9,6 +9,10 @@ import { AvaibleWebdnnBackendSelector } from '../shared/avaibleWebdnnBackendSele
 import { useTensorflowEmnistModel } from '@/hooks/tensorflow/useTensorflowEmnistModel'
 import { useWebDnnEmnistModel } from '@/hooks/webDnn/useWebDnnEmnistModel'
 import { useOnnxEmnistModel } from '@/hooks/onxx/useOnnxEmnistModel'
+import type { BenchmarkRow } from '@/types/benchmark'
+import { runMeasured } from '@/lib/runMeasure'
+import { BenchmarkTable } from '../benchmark/benchmarkTable'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 export const Emnist = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -46,20 +50,47 @@ export const Emnist = () => {
   } = useOnnxEmnistModel()
 
   const [runningAll, setRunningAll] = useState(false)
+  const [rows, setRows] = useState<BenchmarkRow[]>([])
+  const [canvasEmpty, setCanvasEmpty] = useState(true)
+
+  const handleEmptyChange = (isEmpty: boolean) => {
+    setCanvasEmpty(isEmpty)
+  }
 
   const handlePredictClick = async () => {
     if (!canvasRef.current) return
-
     setRunningAll(true)
+
     try {
-      await tfPredictFromCanvas(canvasRef.current)
-      await onnxPredictFromCanvas(canvasRef.current)
-      await webdnnPredictFromCanvas(canvasRef.current)
+      const canvas = canvasRef.current
+
+      const tfRow = await runMeasured(
+        'TF',
+        tensorflowbackend,
+        () => tfPredictFromCanvas(canvas),
+        (res) => (typeof res === 'string' ? res : null)
+      )
+      setRows((r) => [tfRow, ...r])
+
+      const onnxRow = await runMeasured(
+        'ONNX',
+        'wasm',
+        () => onnxPredictFromCanvas(canvas),
+        (res) => (typeof res === 'string' ? res : null)
+      )
+      setRows((r) => [onnxRow, ...r])
+
+      const webdnnRow = await runMeasured(
+        'WebDNN',
+        webdnnBackend,
+        () => webdnnPredictFromCanvas(canvas),
+        (res) => (typeof res === 'string' ? res : null)
+      )
+      setRows((r) => [webdnnRow, ...r])
     } finally {
       setRunningAll(false)
     }
   }
-
   const isButtonDisabled =
     !canvasRef.current ||
     !tfReady ||
@@ -71,6 +102,7 @@ export const Emnist = () => {
     tfPredicting ||
     onnxPredicting ||
     webdnnPredicting ||
+    canvasEmpty ||
     runningAll
 
   let buttonLabel: string
@@ -85,109 +117,119 @@ export const Emnist = () => {
   const allPredicted = tfPrediction !== null && onnxPrediction !== null && webdnnPrediction !== null
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Emnist model benchmark</h1>
-        <p className="text-sm text-muted-foreground">
-          Draw digit (0-9) or letter (a-z/A-Z) on the canvas, then compare predictions from
-          TensorFlow, ONNX and WebDNN models in the browser.
-        </p>
-      </header>
+    <div className="mx-auto max-w-4xl">
+      <Tabs defaultValue="emnist">
+        <TabsList>
+          <TabsTrigger value="emnist">Emnist playground</TabsTrigger>
+          <TabsTrigger value="table">Table</TabsTrigger>
+        </TabsList>
 
-      <section className="rounded-xl border bg-background/60 p-4 shadow-sm">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div className="flex flex-wrap items-center gap-3">
-            <AvaibleTensorflowBackendSelector
-              backend={tensorflowbackend}
-              onChange={setTensorflowBackend}
-              disabled={tfPredicting || runningAll || tfLoading}
-              className="min-w-[220px]"
-            />
-            <AvaibleWebdnnBackendSelector
-              backend={webdnnBackend}
-              onChange={setWebdnnBackend}
-              disabled={tfPredicting || runningAll || tfLoading}
-              className="min-w-[220px]"
-            />
-            <WasmOnlySupport />
-          </div>
+        <TabsContent value="emnist" className="space-y-4 mt-6">
+          <header className="space-y-1">
+            <h1 className="text-2xl font-semibold tracking-tight">Emnist model benchmark</h1>
+            <p className="text-sm text-muted-foreground">
+              Draw digit (0-9) or letter (a-z/A-Z) on the canvas, then compare predictions from
+              TensorFlow, ONNX and WebDNN models in the browser.
+            </p>
+          </header>
 
-          {(tfLoading || onnxLoading || webdnnLoading) && (
-            <div className="text-xs text-muted-foreground">
-              {tfLoading && onnxLoading && webdnnLoading
-                ? 'Loading TensorFlow, ONNX and WebDNN models...'
-                : tfLoading
-                  ? 'Loading TensorFlow model...'
-                  : onnxLoading
-                    ? 'Loading ONNX model...'
-                    : 'Loading WebDNN model...'}
+          <section className="rounded-xl border bg-background/60 p-4 shadow-sm">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div className="flex flex-wrap items-center gap-3">
+                <AvaibleTensorflowBackendSelector
+                  backend={tensorflowbackend}
+                  onChange={setTensorflowBackend}
+                  disabled={tfPredicting || runningAll || tfLoading}
+                  className="min-w-[220px]"
+                />
+                <AvaibleWebdnnBackendSelector
+                  backend={webdnnBackend}
+                  onChange={setWebdnnBackend}
+                  disabled={tfPredicting || runningAll || tfLoading}
+                  className="min-w-[220px]"
+                />
+                <WasmOnlySupport />
+              </div>
+
+              {(tfLoading || onnxLoading || webdnnLoading) && (
+                <div className="text-xs text-muted-foreground">
+                  {tfLoading && onnxLoading && webdnnLoading
+                    ? 'Loading TensorFlow, ONNX and WebDNN models...'
+                    : tfLoading
+                      ? 'Loading TensorFlow model...'
+                      : onnxLoading
+                        ? 'Loading ONNX model...'
+                        : 'Loading WebDNN model...'}
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      </section>
+          </section>
 
-      <section className="rounded-xl border bg-background/60 p-4 shadow-sm">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div className="flex flex-col gap-2">
-            <button
-              disabled={isButtonDisabled}
-              onClick={handlePredictClick}
-              className="inline-flex items-center justify-center rounded-lg border px-4 py-2 text-sm font-medium shadow-sm transition
+          <section className="rounded-xl border bg-background/60 p-4 shadow-sm">
+            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+              <div className="flex flex-col gap-2">
+                <button
+                  disabled={isButtonDisabled}
+                  onClick={handlePredictClick}
+                  className="inline-flex items-center justify-center rounded-lg border px-4 py-2 text-sm font-medium shadow-sm transition
                          hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {buttonLabel}
-            </button>
+                >
+                  {buttonLabel}
+                </button>
 
-            {!allPredicted &&
-              !tfLoading &&
-              !onnxLoading &&
-              !webdnnLoading &&
-              tfReady &&
-              onnxReady &&
-              webdnnReady && (
                 <span className="text-xs text-muted-foreground">
                   Draw and click &quot;Recognize (TF + ONNX + WebDNN)&quot; to run predictions.
                 </span>
-              )}
-          </div>
-
-          <div className="min-h-[40px] text-sm md:text-right">
-            {allPredicted && (
-              <div className="flex flex-col gap-1 md:items-end">
-                <span>
-                  TF model predicts: <span className="font-semibold">{tfPrediction}</span>
-                </span>
-                <span>
-                  ONNX model predicts: <span className="font-semibold">{onnxPrediction}</span>
-                </span>
-                <span>
-                  WebDNN model predicts: <span className="font-semibold">{webdnnPrediction}</span>
-                </span>
               </div>
-            )}
 
-            {!allPredicted && (tfLoading || onnxLoading || webdnnLoading) && (
-              <span className="text-xs text-muted-foreground">
-                Models are loading, please wait a moment…
-              </span>
-            )}
+              <div className="min-h-[40px] text-sm md:text-right">
+                {allPredicted && (
+                  <div className="flex flex-col gap-1 md:items-end">
+                    <span>
+                      TF model predicts: <span className="font-semibold">{tfPrediction}</span>
+                    </span>
+                    <span>
+                      ONNX model predicts: <span className="font-semibold">{onnxPrediction}</span>
+                    </span>
+                    <span>
+                      WebDNN model predicts:{' '}
+                      <span className="font-semibold">{webdnnPrediction}</span>
+                    </span>
+                  </div>
+                )}
+
+                {!allPredicted && (tfLoading || onnxLoading || webdnnLoading) && (
+                  <span className="text-xs text-muted-foreground">
+                    Models are loading, please wait a moment…
+                  </span>
+                )}
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-xl border bg-background/60 p-4 shadow-sm">
+            <h2 className="mb-3 text-sm font-medium text-muted-foreground">Drawing canvas</h2>
+            <div className="overflow-hidden rounded-lg bg-card">
+              <Canvas
+                canvasRefExternal={canvasRef}
+                onEmptyChange={handleEmptyChange}
+                className="mt-0"
+                background="#ffffff"
+                initialColor="#111827"
+                initialSize={8}
+                height={520}
+              />
+            </div>
+          </section>
+        </TabsContent>
+        <TabsContent value="table" className="mt-6">
+          <div className="h-full overflow-hidden rounded-xl border bg-background">
+            <div className="max-h-[80vh] overflow-y-auto p-3">
+              <BenchmarkTable rows={rows} />
+            </div>
           </div>
-        </div>
-      </section>
-
-      <section className="rounded-xl border bg-background/60 p-4 shadow-sm">
-        <h2 className="mb-3 text-sm font-medium text-muted-foreground">Drawing canvas</h2>
-        <div className="overflow-hidden rounded-lg bg-card">
-          <Canvas
-            canvasRefExternal={canvasRef}
-            className="mt-0"
-            background="#ffffff"
-            initialColor="#111827"
-            initialSize={8}
-            height={520}
-          />
-        </div>
-      </section>
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }
