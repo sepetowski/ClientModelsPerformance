@@ -1,5 +1,3 @@
-// src/components/canvas/Canvas.tsx
-
 import { useRef, useState, useCallback, useEffect, type RefObject } from 'react'
 import { Toolbar } from './toolbar'
 import { useCanvasDrawing } from '@/hooks/useCanvasDrawing'
@@ -16,6 +14,7 @@ interface Props {
   className?: string
   height?: number
   canvasRefExternal?: RefObject<HTMLCanvasElement | null>
+  onEmptyChange?: (isEmpty: boolean) => void
 }
 
 export const Canvas = ({
@@ -25,25 +24,19 @@ export const Canvas = ({
   className = '',
   height = 520,
   canvasRefExternal,
+  onEmptyChange,
 }: Props) => {
   const internalCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const canvasRef = canvasRefExternal ?? internalCanvasRef
-
   const wrapperRef = useRef<HTMLDivElement | null>(null)
 
   const [brushColor, setBrushColor] = useState(initialColor)
   const [brushSize, setBrushSize] = useState(initialSize)
   const [isEraser, setIsEraser] = useState(false)
   const [saveOpen, setSaveOpen] = useState(false)
+  const [isEmpty, setIsEmpty] = useState(true)
 
   const { pushSnapshot, undo, redo } = useCanvasHistory(canvasRef)
-
-  const { handlePointerDown, handlePointerMove, endStroke } = useCanvasDrawing(canvasRef, {
-    brushSize,
-    brushColor,
-    isEraser,
-    onBeginStroke: () => pushSnapshot(),
-  })
 
   const doResize = useCallback(
     (preserve = true) => {
@@ -55,26 +48,61 @@ export const Canvas = ({
     [background, height, canvasRef]
   )
 
+  const setEmptyState = useCallback((v: boolean) => {
+    setIsEmpty(v)
+    onEmptyChange?.(v)
+  }, [])
+
+  const { handlePointerDown, handlePointerMove, endStroke } = useCanvasDrawing(canvasRef, {
+    brushSize,
+    brushColor,
+    isEraser,
+    onBeginStroke: () => {
+      pushSnapshot()
+      setEmptyState(false)
+    },
+  })
+
   useEffect(() => {
     doResize(false)
-    const onResize = () => doResize()
+    setEmptyState(true)
+
+    const onResize = () => {
+      doResize()
+    }
+
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
-  }, [doResize])
+  }, [doResize, setEmptyState])
 
   const clear = () => {
     const canvas = canvasRef.current
     const ctx = canvas?.getContext('2d')
     if (!canvas || !ctx) return
+
     pushSnapshot()
     ctx.save()
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.clearRect(0, 0, canvas.width, canvas.height)
     ctx.restore()
     doResize(false)
+    setEmptyState(true)
   }
 
-  const openSaveDialog = () => setSaveOpen(true)
+  const onUndo = () => {
+    undo()
+    setEmptyState(false)
+  }
+
+  const onRedo = () => {
+    redo()
+    setEmptyState(false)
+  }
+
+  const openSaveDialog = () => {
+    if (isEmpty) return
+    setSaveOpen(true)
+  }
 
   const handleConfirmSave = (filename: string) => {
     const canvas = canvasRef.current
@@ -91,14 +119,15 @@ export const Canvas = ({
         setBrushColor={setBrushColor}
         isEraser={isEraser}
         setIsEraser={setIsEraser}
-        onUndo={undo}
-        onRedo={redo}
+        onUndo={onUndo}
+        onRedo={onRedo}
         onClear={clear}
         onDownload={openSaveDialog}
+        isEmpty={isEmpty}
       />
 
       <div
-        ref={wrapperRef as any}
+        ref={wrapperRef}
         className="relative w-full rounded-2xl border bg-background overflow-hidden"
       >
         <canvas
@@ -106,10 +135,11 @@ export const Canvas = ({
           className="touch-none block cursor-crosshair"
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
-          onPointerUp={endStroke}
-          onPointerLeave={endStroke}
+          onPointerUp={(e) => endStroke(e)}
+          onPointerLeave={(e) => endStroke(e)}
         />
       </div>
+
       <SaveDialog open={saveOpen} onOpenChange={setSaveOpen} onConfirm={handleConfirmSave} />
     </div>
   )

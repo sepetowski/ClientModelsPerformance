@@ -25,6 +25,7 @@ import { PRESET_COLORS } from '@/const/paintColors'
 
 interface Props {
   brushSize: number
+  isEmpty: boolean
   setBrushSize: (n: number) => void
   brushColor: string
   setBrushColor: (c: string) => void
@@ -38,6 +39,7 @@ interface Props {
 
 export const Toolbar = ({
   brushSize,
+  isEmpty,
   setBrushSize,
   brushColor,
   setBrushColor,
@@ -146,7 +148,7 @@ export const Toolbar = ({
                 <RotateCcw className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Undo (Ctrl/Cmd+Z)</TooltipContent>
+            <TooltipContent>Undo</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -154,7 +156,7 @@ export const Toolbar = ({
                 <RotateCw className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Redo (Ctrl/Cmd+Shift+Z)</TooltipContent>
+            <TooltipContent>Redo</TooltipContent>
           </Tooltip>
 
           <DropdownMenu>
@@ -168,7 +170,7 @@ export const Toolbar = ({
               <DropdownMenuItem onClick={onClear}>
                 <Trash2 className="mr-2 h-4 w-4" /> Clear
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={onDownload}>
+              <DropdownMenuItem onClick={onDownload} disabled={isEmpty}>
                 <Download className="mr-2 h-4 w-4" /> Save PNG
               </DropdownMenuItem>
             </DropdownMenuContent>
