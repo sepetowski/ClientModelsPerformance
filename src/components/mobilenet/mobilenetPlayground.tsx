@@ -1,0 +1,124 @@
+import { useState } from 'react'
+import { BenchmarkTable, type BenchmarkRow } from '../benchmark/benchmarkTable'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs'
+import { AvaibleTensorflowBackendSelector } from '../shared/avaibleTensorflowBackendSelector'
+import { AvaibleWebdnnBackendSelector } from '../shared/avaibleWebdnnBackendSelector copy'
+import { WasmOnlySupport } from '../badges/WasmOnlySupport'
+import { useOnnxEmnistModel } from '@/hooks/onxx/useOnnxEmnistModel'
+import { useTensorflowEmnistModel } from '@/hooks/tensorflow/useTensorflowEmnistModel'
+import { useWebDnnEmnistModel } from '@/hooks/webDnn/useWebDnnEmnistModel'
+import { AVAIBLE_TENSORFLOW_BACKENDS } from '@/const/avaibleTensorflowBackends'
+import { AVAIBLE_WEBDNN_BACKENDS } from '@/const/avaibleWebdnnBackends'
+import type { AvaibleTensorflowBackendType, AvaibleWebdnnBackendType } from '@/types/avaibleBackend'
+import { Input } from '../ui/input'
+import { Label } from '../ui/label'
+import { ImagePiceker } from './imagePiceker'
+import { Card, CardContent } from '../ui/card'
+
+export const MobilenetPlayground = () => {
+  const [rows, setRows] = useState<BenchmarkRow[]>([])
+  const [runningAll, setRunningAll] = useState(false)
+
+  const [tensorflowbackend, setTensorflowBackend] = useState<AvaibleTensorflowBackendType>(
+    AVAIBLE_TENSORFLOW_BACKENDS.CPU
+  )
+
+  const [webdnnBackend, setWebdnnBackend] = useState<AvaibleWebdnnBackendType>(
+    AVAIBLE_WEBDNN_BACKENDS.CPU
+  )
+
+  const {
+    ready: tfReady,
+    loadingModel: tfLoading,
+    predicting: tfPredicting,
+    prediction: tfPrediction,
+    predictFromCanvas: tfPredictFromCanvas,
+  } = useTensorflowEmnistModel(tensorflowbackend)
+
+  const {
+    ready: webdnnReady,
+    loadingModel: webdnnLoading,
+    predicting: webdnnPredicting,
+    prediction: webdnnPrediction,
+    predictFromCanvas: webdnnPredictFromCanvas,
+  } = useWebDnnEmnistModel(webdnnBackend)
+
+  const {
+    ready: onnxReady,
+    loadingModel: onnxLoading,
+    predicting: onnxPredicting,
+    prediction: onnxPrediction,
+    predictFromCanvas: onnxPredictFromCanvas,
+  } = useOnnxEmnistModel()
+
+  function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+  }
+
+  return (
+    <Tabs defaultValue="mobilenet">
+      <TabsList>
+        <TabsTrigger value="mobilenet">Mobilenet playground</TabsTrigger>
+        <TabsTrigger value="table">Table</TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="mobilenet" className="space-y-6 mt-6">
+        <header className="space-y-1">
+          <h1 className="text-2xl font-semibold tracking-tight">Mobilenet v2 model benchmark</h1>
+          <p className="text-sm text-muted-foreground">
+            Lorem ipsum dolor, sit amet consectetur adipisicing elit. Natus, officia.
+          </p>
+        </header>
+
+        <Card>
+          <CardContent>
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div className="flex flex-wrap items-center gap-3">
+                <AvaibleTensorflowBackendSelector
+                  backend={tensorflowbackend}
+                  onChange={(e) => setTensorflowBackend(e)}
+                  disabled={tfPredicting || runningAll || tfLoading}
+                  className="min-w-[220px]"
+                />
+                <AvaibleWebdnnBackendSelector
+                  backend={webdnnBackend}
+                  onChange={(e) => setWebdnnBackend(e)}
+                  disabled={tfPredicting || runningAll || tfLoading}
+                  className="min-w-[220px]"
+                />
+                <WasmOnlySupport />
+              </div>
+              {(tfLoading || onnxLoading || webdnnLoading) && (
+                <div className="text-xs text-muted-foreground">
+                  {tfLoading && onnxLoading && webdnnLoading
+                    ? 'Loading TensorFlow, ONNX and WebDNN models...'
+                    : tfLoading
+                      ? 'Loading TensorFlow model...'
+                      : onnxLoading
+                        ? 'Loading ONNX model...'
+                        : 'Loading WebDNN model...'}
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <section className="flex gap-4 flex-col lg:flex-row">
+          <div className="lg:w-4/6">
+            <ImagePiceker />
+          </div>
+          <Card className="lg:w-2/6">
+            <CardContent>
+              <div className="text-sm text-muted-foreground">
+                Mobilenet v2 model benchmark playground content goes here.
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+      </TabsContent>
+      <TabsContent value="table" className="mt-6">
+        <BenchmarkTable rows={rows} />
+      </TabsContent>
+    </Tabs>
+  )
+}

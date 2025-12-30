@@ -13,8 +13,10 @@ import type { BenchmarkRow } from '@/types/benchmark'
 import { runMeasured } from '@/lib/runMeasure'
 import { BenchmarkTable } from '../benchmark/benchmarkTable'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Card, CardContent, CardHeader } from '../ui/card'
+import { Car } from 'lucide-react'
 
-export const Emnist = () => {
+export const EmnistPlayground = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
 
   const [tensorflowbackend, setTensorflowBackend] = useState<AvaibleTensorflowBackendType>(
@@ -117,34 +119,34 @@ export const Emnist = () => {
   const allPredicted = tfPrediction !== null && onnxPrediction !== null && webdnnPrediction !== null
 
   return (
-    <div className="mx-auto max-w-4xl">
-      <Tabs defaultValue="emnist">
-        <TabsList>
-          <TabsTrigger value="emnist">Emnist playground</TabsTrigger>
-          <TabsTrigger value="table">Table</TabsTrigger>
-        </TabsList>
+    <Tabs defaultValue="emnist">
+      <TabsList>
+        <TabsTrigger value="emnist">Emnist playground</TabsTrigger>
+        <TabsTrigger value="table">Table</TabsTrigger>
+      </TabsList>
 
-        <TabsContent value="emnist" className="space-y-4 mt-6">
-          <header className="space-y-1">
-            <h1 className="text-2xl font-semibold tracking-tight">Emnist model benchmark</h1>
-            <p className="text-sm text-muted-foreground">
-              Draw digit (0-9) or letter (a-z/A-Z) on the canvas, then compare predictions from
-              TensorFlow, ONNX and WebDNN models in the browser.
-            </p>
-          </header>
+      <TabsContent value="emnist" className="space-y-6 mt-6">
+        <header className="space-y-1">
+          <h1 className="text-2xl font-semibold tracking-tight">Emnist model benchmark</h1>
+          <p className="text-sm text-muted-foreground">
+            Draw digit (0-9) or letter (a-z/A-Z) on the canvas, then compare predictions from
+            TensorFlow, ONNX and WebDNN models in the browser.
+          </p>
+        </header>
 
-          <section className="rounded-xl border bg-background/60 p-4 shadow-sm">
+        <Card>
+          <CardContent>
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="flex flex-wrap items-center gap-3">
                 <AvaibleTensorflowBackendSelector
                   backend={tensorflowbackend}
-                  onChange={setTensorflowBackend}
+                  onChange={(e) => setTensorflowBackend(e)}
                   disabled={tfPredicting || runningAll || tfLoading}
                   className="min-w-[220px]"
                 />
                 <AvaibleWebdnnBackendSelector
                   backend={webdnnBackend}
-                  onChange={setWebdnnBackend}
+                  onChange={(e) => setWebdnnBackend(e)}
                   disabled={tfPredicting || runningAll || tfLoading}
                   className="min-w-[220px]"
                 />
@@ -163,9 +165,11 @@ export const Emnist = () => {
                 </div>
               )}
             </div>
-          </section>
+          </CardContent>
+        </Card>
 
-          <section className="rounded-xl border bg-background/60 p-4 shadow-sm">
+        <Card>
+          <CardContent>
             <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
               <div className="flex flex-col gap-2">
                 <button
@@ -205,31 +209,29 @@ export const Emnist = () => {
                 )}
               </div>
             </div>
-          </section>
+          </CardContent>
+        </Card>
 
-          <section className="rounded-xl border bg-background/60 p-4 shadow-sm">
+        <Card>
+          <CardHeader>
             <h2 className="mb-3 text-sm font-medium text-muted-foreground">Drawing canvas</h2>
-            <div className="overflow-hidden rounded-lg bg-card">
-              <Canvas
-                canvasRefExternal={canvasRef}
-                onEmptyChange={handleEmptyChange}
-                className="mt-0"
-                background="#ffffff"
-                initialColor="#111827"
-                initialSize={8}
-                height={520}
-              />
-            </div>
-          </section>
-        </TabsContent>
-        <TabsContent value="table" className="mt-6">
-          <div className="h-full overflow-hidden rounded-xl border bg-background">
-            <div className="max-h-[80vh] overflow-y-auto p-3">
-              <BenchmarkTable rows={rows} />
-            </div>
-          </div>
-        </TabsContent>
-      </Tabs>
-    </div>
+          </CardHeader>
+          <CardContent>
+            <Canvas
+              canvasRefExternal={canvasRef}
+              onEmptyChange={handleEmptyChange}
+              className="mt-0"
+              background="#ffffff"
+              initialColor="#111827"
+              initialSize={8}
+              height={520}
+            />
+          </CardContent>
+        </Card>
+      </TabsContent>
+      <TabsContent value="table" className="mt-6">
+        <BenchmarkTable rows={rows} />
+      </TabsContent>
+    </Tabs>
   )
 }
