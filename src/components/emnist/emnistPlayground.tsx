@@ -15,6 +15,7 @@ import { BenchmarkTable } from '../benchmark/benchmarkTable'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader } from '../ui/card'
 import { Car } from 'lucide-react'
+import { Button } from '../ui/button'
 
 export const EmnistPlayground = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -89,6 +90,9 @@ export const EmnistPlayground = () => {
         (res) => (typeof res === 'string' ? res : null)
       )
       setRows((r) => [webdnnRow, ...r])
+    } catch (e: any) {
+      const msg = String(e?.message ?? e)
+      alert(`Error during prediction: ${msg}`)
     } finally {
       setRunningAll(false)
     }
@@ -172,14 +176,13 @@ export const EmnistPlayground = () => {
           <CardContent>
             <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
               <div className="flex flex-col gap-2">
-                <button
+                <Button
                   disabled={isButtonDisabled}
                   onClick={handlePredictClick}
-                  className="inline-flex items-center justify-center rounded-lg border px-4 py-2 text-sm font-medium shadow-sm transition
-                         hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                  variant={'outline'}
                 >
                   {buttonLabel}
-                </button>
+                </Button>
 
                 <span className="text-xs text-muted-foreground">
                   Draw and click &quot;Recognize (TF + ONNX + WebDNN)&quot; to run predictions.

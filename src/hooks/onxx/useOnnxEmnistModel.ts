@@ -76,8 +76,7 @@ export const useOnnxEmnistModel = (): EmnistModelResult => {
       console.log('ONNX index:', maxIdx, 'Label:', label)
       return label
     } catch (e) {
-      console.error('Error during ONNX prediction', e)
-      return null
+      throw e
     } finally {
       setPredicting(false)
     }

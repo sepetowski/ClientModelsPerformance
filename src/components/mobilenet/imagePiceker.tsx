@@ -1,16 +1,21 @@
-import React, { useRef, useState } from 'react'
+import { useRef, useState, type ChangeEvent } from 'react'
 import { Button } from '../ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
 import { Separator } from '../ui/separator'
 
-export const ImagePiceker = () => {
+interface Props {
+  onImageLoaded?: (img: HTMLImageElement | null) => void
+}
+
+export const ImagePiceker = ({ onImageLoaded }: Props) => {
   const [imageUrl, setImageUrl] = useState('')
   const [previewSrc, setPreviewSrc] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const imgRef = useRef<HTMLImageElement | null>(null)
 
-  function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+  function onFileChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
 
@@ -19,8 +24,8 @@ export const ImagePiceker = () => {
     setPreviewSrc(blobUrl)
   }
 
-  function onLoadUrl() {
-    const url = imageUrl.trim()
+  async function onLoadUrl() {
+    const url = await urlToBlobObjectUrl(imageUrl.trim())
     if (!url) {
       return
     }
@@ -39,16 +44,26 @@ export const ImagePiceker = () => {
 
     setImageUrl('')
     setPreviewSrc(null)
+    onImageLoaded?.(null)
+  }
+  async function urlToBlobObjectUrl(url: string) {
+    const res = await fetch(url, { mode: 'cors' })
+    if (!res.ok) throw new Error('Failed to fetch image')
+    const blob = await res.blob()
+    return URL.createObjectURL(blob)
   }
 
   function onImgLoad() {
     if (previewSrc?.startsWith('blob:')) {
       URL.revokeObjectURL(previewSrc)
     }
+
+    onImageLoaded?.(imgRef.current)
   }
 
   function onImgError() {
     setPreviewSrc(null)
+    onImageLoaded?.(null)
   }
 
   return (
@@ -103,9 +118,11 @@ export const ImagePiceker = () => {
             <section className="space-y-2">
               <Label>Preview</Label>
               <img
+                ref={imgRef}
                 src={previewSrc}
                 alt="preview"
                 onLoad={onImgLoad}
+                crossOrigin="anonymous"
                 onError={onImgError}
                 className="w-full rounded-lg border object-contain max-h-[420px]"
               />

@@ -66,8 +66,7 @@ export const useWebDnnEmnistModel = (backend: AvaibleWebdnnBackendType): EmnistM
       setPrediction(label)
       return label
     } catch (e) {
-      console.error('Error during WebDNN prediction', e)
-      return null
+      throw e
     } finally {
       setPredicting(false)
     }

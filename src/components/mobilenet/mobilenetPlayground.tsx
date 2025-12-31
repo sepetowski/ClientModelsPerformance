@@ -4,20 +4,26 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs'
 import { AvaibleTensorflowBackendSelector } from '../shared/avaibleTensorflowBackendSelector'
 import { AvaibleWebdnnBackendSelector } from '../shared/avaibleWebdnnBackendSelector copy'
 import { WasmOnlySupport } from '../badges/WasmOnlySupport'
-import { useOnnxEmnistModel } from '@/hooks/onxx/useOnnxEmnistModel'
-import { useTensorflowEmnistModel } from '@/hooks/tensorflow/useTensorflowEmnistModel'
-import { useWebDnnEmnistModel } from '@/hooks/webDnn/useWebDnnEmnistModel'
 import { AVAIBLE_TENSORFLOW_BACKENDS } from '@/const/avaibleTensorflowBackends'
 import { AVAIBLE_WEBDNN_BACKENDS } from '@/const/avaibleWebdnnBackends'
 import type { AvaibleTensorflowBackendType, AvaibleWebdnnBackendType } from '@/types/avaibleBackend'
-import { Input } from '../ui/input'
-import { Label } from '../ui/label'
 import { ImagePiceker } from './imagePiceker'
 import { Card, CardContent } from '../ui/card'
+import { useTensorflowMobilenetModel } from '@/hooks/tensorflow/useTensorflowMobilenetModel'
+import { runMeasured } from '@/lib/runMeasure'
+import { Button } from '../ui/button'
+import { useOnnxMobilenetModel } from '@/hooks/onxx/useOnnxMobilenetModel'
+import { ResultsList } from './resultsList'
+import { Separator } from '../ui/separator'
+import { useWebDnnMobilenetModel } from '@/hooks/webDnn/useWebDnnMobilenetModel'
+
+const MAX_K = 5
 
 export const MobilenetPlayground = () => {
   const [rows, setRows] = useState<BenchmarkRow[]>([])
   const [runningAll, setRunningAll] = useState(false)
+
+  const [imgEl, setImgEl] = useState<HTMLImageElement | null>(null)
 
   const [tensorflowbackend, setTensorflowBackend] = useState<AvaibleTensorflowBackendType>(
     AVAIBLE_TENSORFLOW_BACKENDS.CPU
@@ -32,28 +38,80 @@ export const MobilenetPlayground = () => {
     loadingModel: tfLoading,
     predicting: tfPredicting,
     prediction: tfPrediction,
-    predictFromCanvas: tfPredictFromCanvas,
-  } = useTensorflowEmnistModel(tensorflowbackend)
+    predictFromImage: tfPredictFromImage,
+    topK: tfTopK,
+  } = useTensorflowMobilenetModel(tensorflowbackend)
 
   const {
     ready: webdnnReady,
     loadingModel: webdnnLoading,
     predicting: webdnnPredicting,
     prediction: webdnnPrediction,
-    predictFromCanvas: webdnnPredictFromCanvas,
-  } = useWebDnnEmnistModel(webdnnBackend)
+    predictFromImage: webdnnPredictFromImage,
+    topK: webdnnTopK,
+  } = useWebDnnMobilenetModel(webdnnBackend)
 
   const {
     ready: onnxReady,
     loadingModel: onnxLoading,
     predicting: onnxPredicting,
     prediction: onnxPrediction,
-    predictFromCanvas: onnxPredictFromCanvas,
-  } = useOnnxEmnistModel()
+    predictFromImage: onnxPredictFromImage,
+    topK: onnxTopK,
+  } = useOnnxMobilenetModel()
 
-  function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
+  const handlePredictClick = async () => {
+    if (imgEl === null) return
+    setRunningAll(true)
+
+    try {
+      const tfRow = await runMeasured(
+        'TF',
+        tensorflowbackend,
+        () => tfPredictFromImage(imgEl, MAX_K),
+        (res) => (typeof res === 'string' ? res : null)
+      )
+      setRows((r) => [tfRow, ...r])
+
+      const onnxRow = await runMeasured(
+        'ONNX',
+        'wasm',
+        () => onnxPredictFromImage(imgEl, MAX_K),
+        (res) => (typeof res === 'string' ? res : null)
+      )
+      setRows((r) => [onnxRow, ...r])
+
+      const webdnnRow = await runMeasured(
+        'WebDNN',
+        webdnnBackend,
+        () => webdnnPredictFromImage(imgEl, MAX_K),
+        (res) => (typeof res === 'string' ? res : null)
+      )
+      setRows((r) => [webdnnRow, ...r])
+    } catch (e: any) {
+      const msg = String(e?.message ?? e)
+      if (msg.includes('Operator implementation for Clip')) {
+        alert(' Operator implementation for Clip, opset=13 does not exist.')
+      } else {
+        alert(`Error during prediction: ${msg}`)
+      }
+    } finally {
+      setRunningAll(false)
+    }
   }
+
+  const isButtonDisabled =
+    !tfReady ||
+    !onnxReady ||
+    !webdnnReady ||
+    imgEl === null ||
+    tfLoading ||
+    onnxLoading ||
+    webdnnLoading ||
+    tfPredicting ||
+    onnxPredicting ||
+    webdnnPredicting ||
+    runningAll
 
   return (
     <Tabs defaultValue="mobilenet">
@@ -105,13 +163,39 @@ export const MobilenetPlayground = () => {
 
         <section className="flex gap-4 flex-col lg:flex-row">
           <div className="lg:w-4/6">
-            <ImagePiceker />
+            <ImagePiceker onImageLoaded={(img) => setImgEl(img)} />
           </div>
           <Card className="lg:w-2/6">
             <CardContent>
-              <div className="text-sm text-muted-foreground">
-                Mobilenet v2 model benchmark playground content goes here.
+              <div className="w-full">
+                <Button
+                  type="button"
+                  variant={'outline'}
+                  className="w-full"
+                  onClick={handlePredictClick}
+                  disabled={isButtonDisabled}
+                >
+                  Predict (TF + ONXX + WebDNN)
+                </Button>
+                <span className="text-xs text-muted-foreground text-center">
+                  Select image and click &quot;Recognize (TF + ONNX + WebDNN)&quot; to run
+                  predictions.
+                </span>
               </div>
+
+              {(tfTopK.length > 0 || onnxTopK.length > 0) && (
+                <div className="mt-4 text-sm">
+                  <div className="mt-4 space-y-4">
+                    <ResultsList title="TensorFlow results" items={tfTopK} />
+
+                    <Separator />
+                    <ResultsList title="ONNX results" items={onnxTopK} />
+
+                    <Separator />
+                    <ResultsList title="WebDNN results" items={webdnnTopK} />
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </section>
