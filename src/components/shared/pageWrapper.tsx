@@ -5,9 +5,5 @@ interface Props {
 }
 
 export const PageWrapper = ({ children }: Props) => {
-  return (
-    <main className="flex w-full flex-col items-center justify-start px-4">
-      <div className="w-full max-w-7xl">{children}</div>
-    </main>
-  )
+  return <main className="w-full mx-auto max-w-7xl p-4">{children}</main>
 }

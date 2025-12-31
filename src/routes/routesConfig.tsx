@@ -1,5 +1,6 @@
 import { EmnistPage } from '@/pages/emnist'
 import { Home } from '@/pages/home'
+import { MobilenetPage } from '@/pages/mobilenet'
 import type { JSX } from 'react'
 
 export interface AppRoute {
@@ -18,5 +19,10 @@ export const appRoutes: AppRoute[] = [
     path: '/emnist',
     name: 'Emnist',
     element: <EmnistPage />,
+  },
+  {
+    path: '/mobilenet',
+    name: 'MobileNet',
+    element: <MobilenetPage />,
   },
 ]

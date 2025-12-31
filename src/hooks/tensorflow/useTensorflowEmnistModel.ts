@@ -75,8 +75,7 @@ export const useTensorflowEmnistModel = (
 
       return label
     } catch (e) {
-      console.error('Error during TF prediction', e)
-      return null
+      throw e
     } finally {
       setPredicting(false)
     }

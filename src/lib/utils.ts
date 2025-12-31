@@ -74,6 +74,5 @@ export function compareStats(a: Stats, b: Stats): number {
     if (da !== db) return da - db
   }
 
-  // więcej próbek = lepiej (odwrócone)
   return b.n - a.n
 }
