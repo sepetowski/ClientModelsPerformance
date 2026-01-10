@@ -1,41 +1,21 @@
-import { useEffect, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { preprocessDigitCanvas } from '@/lib/preprocessDigitCanvas'
 import { useWebDnnModelRunner } from './useWebDnnModelRunner'
 import type { AvaibleWebdnnBackendType } from '@/types/avaibleBackend'
 import type { EmnistModelResult } from '@/types/emnistModelResult'
+import { useLabels } from '../useLabels'
 
 export const useWebDnnEmnistModel = (backend: AvaibleWebdnnBackendType): EmnistModelResult => {
-  const { runner, backendReady, loadingModel } = useWebDnnModelRunner({
-    backend,
-    modelDir: '/models/onxx/emnist/',
-  })
+  const options = useMemo(() => ({ backend, modelDir: '/models/onxx/emnist/' }), [backend])
 
-  const [labels, setLabels] = useState<string[]>([])
+  const { runner, backendReady, loadingModel } = useWebDnnModelRunner(options)
+
+  const { data: labels } = useLabels('/labels/emnist/labels.txt')
   const [predicting, setPredicting] = useState(false)
   const [prediction, setPrediction] = useState<string | null>(null)
 
-  useEffect(() => {
-    const loadLabels = async () => {
-      try {
-        const res = await fetch('/labels/emnist/labels.txt')
-        const text = await res.text()
-        const parsed = text
-          .split(/\r?\n/)
-          .map((l) => l.trim())
-          .filter(Boolean)
-
-        setLabels(parsed)
-      } catch (err) {
-        console.error('Failed to load EMNIST labels', err)
-        setLabels([])
-      }
-    }
-
-    loadLabels()
-  }, [])
-
   const predictFromCanvas = async (canvas: HTMLCanvasElement | null): Promise<string | null> => {
-    if (!runner || !canvas || labels.length === 0) return null
+    if (!runner || !canvas || labels?.length === 0) return null
 
     setPredicting(true)
 
@@ -62,7 +42,7 @@ export const useWebDnnEmnistModel = (backend: AvaibleWebdnnBackendType): EmnistM
         }
       }
 
-      const label = labels[maxIdx] ?? null
+      const label = labels ? labels[maxIdx] : null
       setPrediction(label)
       return label
     } catch (e) {
@@ -73,7 +53,7 @@ export const useWebDnnEmnistModel = (backend: AvaibleWebdnnBackendType): EmnistM
   }
 
   return {
-    ready: backendReady && labels.length > 0,
+    ready: backendReady && labels?.length! > 0,
     loadingModel,
     predicting,
     prediction,

@@ -1,47 +1,26 @@
-import { useEffect, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useWebDnnModelRunner } from './useWebDnnModelRunner'
 import { imageElementToImageData } from '@/lib/imageElementToImageData'
 import { preprocessMobilenetV2FromImageData } from '@/lib/preprocessMobilenetV2'
 import type { AvaibleWebdnnBackendType } from '@/types/avaibleBackend'
 import type { MobilenetModelResult, MobilenetTopItem } from '@/types/mobilenetModelResult'
+import { useLabels } from '../useLabels'
 
 declare const WebDNN: any
 
 export const useWebDnnMobilenetModel = (
   backend: AvaibleWebdnnBackendType
 ): MobilenetModelResult => {
-  const { runner, backendReady, loadingModel } = useWebDnnModelRunner({
-    backend,
-    modelDir: '/models/onxx/mobilenet/',
-  })
+  const options = useMemo(() => ({ backend, modelDir: '/models/onxx/mobilenet/' }), [backend])
+  const { runner, backendReady, loadingModel } = useWebDnnModelRunner(options)
 
-  const [labels, setLabels] = useState<string[]>([])
+  const { data: labels } = useLabels('/labels/mobilenet/labels.txt')
   const [predicting, setPredicting] = useState(false)
   const [prediction, setPrediction] = useState<string | null>(null)
   const [topK, setTopK] = useState<MobilenetTopItem[]>([])
 
-  useEffect(() => {
-    const loadLabels = async () => {
-      try {
-        const res = await fetch('/labels/mobilenet/labels.txt')
-        const text = await res.text()
-        const parsed = text
-          .split(/\r?\n/)
-          .map((l) => l.trim().replace(/_/g, ' '))
-          .filter(Boolean)
-
-        setLabels(parsed)
-      } catch (err) {
-        console.error('Failed to load MobileNet labels', err)
-        setLabels([])
-      }
-    }
-
-    loadLabels()
-  }, [])
-
   const predictFromImage = async (img: HTMLImageElement | null, k = 5): Promise<string | null> => {
-    if (!runner || !img || labels.length === 0) return null
+    if (!runner || !img || labels?.length === 0) return null
 
     setPredicting(true)
 
@@ -67,12 +46,14 @@ export const useWebDnnMobilenetModel = (
       const kk = Math.max(1, Math.min(k, probs.length))
       const items: MobilenetTopItem[] = []
 
-      for (let i = 0; i < probs.length; i++) {
-        items.push({
-          index: i,
-          prob: probs[i],
-          label: labels[i] ?? `class_${i}`,
-        })
+      if (labels) {
+        for (let i = 0; i < probs.length; i++) {
+          items.push({
+            index: i,
+            prob: probs[i],
+            label: labels[i] ?? `class_${i}`,
+          })
+        }
       }
 
       items.sort((a, b) => b.prob - a.prob)
@@ -92,7 +73,7 @@ export const useWebDnnMobilenetModel = (
   }
 
   return {
-    ready: backendReady && labels.length > 0,
+    ready: backendReady && labels?.length! > 0,
     loadingModel,
     predicting,
     prediction,

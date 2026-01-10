@@ -1,43 +1,26 @@
-import { useEffect, useState } from 'react'
+import { useMemo, useState } from 'react'
 import * as tf from '@tensorflow/tfjs'
 import { preprocessDigitCanvas } from '@/lib/preprocessDigitCanvas'
 import { useTensorflowModelRunner } from './useTensorflowModelRunner'
 import type { AvaibleTensorflowBackendType } from '@/types/avaibleBackend'
 import type { EmnistModelResult } from '@/types/emnistModelResult'
+import { useLabels } from '../useLabels'
 
 export const useTensorflowEmnistModel = (
   backend: AvaibleTensorflowBackendType
 ): EmnistModelResult => {
-  const { model, backendReady, loadingModel } = useTensorflowModelRunner({
-    backend,
-    modelUrl: '/models/tensorflowjs/emnist/model.json',
-  })
+  const options = useMemo(
+    () => ({ backend, modelUrl: '/models/tensorflowjs/emnist/model.json' }),
+    [backend]
+  )
+  const { model, backendReady, loadingModel } = useTensorflowModelRunner(options)
 
-  const [labels, setLabels] = useState<string[]>([])
+  const { data: labels } = useLabels('/labels/emnist/labels.txt')
   const [predicting, setPredicting] = useState(false)
   const [prediction, setPrediction] = useState<string | null>(null)
 
-  useEffect(() => {
-    const loadLabels = async () => {
-      try {
-        const res = await fetch('/labels/emnist/labels.txt')
-        const text = await res.text()
-        const parsed = text
-          .split('\n')
-          .map((l) => l.trim())
-          .filter(Boolean)
-
-        setLabels(parsed)
-      } catch (err) {
-        console.error('Failed to load EMNIST labels', err)
-      }
-    }
-
-    loadLabels()
-  }, [])
-
   const predictFromCanvas = async (canvas: HTMLCanvasElement | null): Promise<string | null> => {
-    if (!model || !canvas || labels.length === 0) return null
+    if (!model || !canvas || labels?.length === 0) return null
 
     setPredicting(true)
 
@@ -68,7 +51,7 @@ export const useTensorflowEmnistModel = (
         }
       }
 
-      const label = labels[maxIdx] ?? null
+      const label = labels ? labels[maxIdx] : null
 
       setPrediction(label)
       console.log('TF index:', maxIdx, 'Label:', label)
@@ -82,7 +65,7 @@ export const useTensorflowEmnistModel = (
   }
 
   return {
-    ready: backendReady,
+    ready: backendReady && !loadingModel && labels?.length! > 0,
     loadingModel,
     predicting,
     prediction,

@@ -1,40 +1,21 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import * as ort from 'onnxruntime-web'
 import { preprocessDigitCanvas } from '@/lib/preprocessDigitCanvas'
 import { useOnnxModelRunner } from './useOnnxModelRunner'
 import type { EmnistModelResult } from '@/types/emnistModelResult'
+import { useLabels } from '../useLabels'
 
 export const useOnnxEmnistModel = (): EmnistModelResult => {
   const { session, ready, loadingModel } = useOnnxModelRunner({
     modelUrl: '/models/onxx/emnist/model.onnx',
   })
 
-  const [labels, setLabels] = useState<string[]>([])
+  const { data: labels } = useLabels('/labels/emnist/labels.txt')
   const [predicting, setPredicting] = useState(false)
   const [prediction, setPrediction] = useState<string | null>(null)
 
-  useEffect(() => {
-    const loadLabels = async () => {
-      try {
-        const res = await fetch('/labels/emnist/labels.txt')
-        const text = await res.text()
-        const parsed = text
-          .split(/\r?\n/)
-          .map((l) => l.trim())
-          .filter(Boolean)
-
-        setLabels(parsed)
-      } catch (err) {
-        console.error('Failed to load EMNIST labels', err)
-        setLabels([])
-      }
-    }
-
-    loadLabels()
-  }, [])
-
   const predictFromCanvas = async (canvas: HTMLCanvasElement | null): Promise<string | null> => {
-    if (!session || !canvas || labels.length === 0) return null
+    if (!session || !canvas || labels?.length === 0) return null
 
     setPredicting(true)
 
@@ -70,7 +51,7 @@ export const useOnnxEmnistModel = (): EmnistModelResult => {
         }
       }
 
-      const label = labels[maxIdx] ?? null
+      const label = labels ? labels[maxIdx] : null
       setPrediction(label)
 
       console.log('ONNX index:', maxIdx, 'Label:', label)
@@ -83,7 +64,7 @@ export const useOnnxEmnistModel = (): EmnistModelResult => {
   }
 
   return {
-    ready: ready && labels.length > 0,
+    ready: ready && labels?.length! > 0,
     loadingModel,
     predicting,
     prediction,

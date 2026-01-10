@@ -16,6 +16,7 @@ import { useOnnxMobilenetModel } from '@/hooks/onxx/useOnnxMobilenetModel'
 import { ResultsList } from './resultsList'
 import { Separator } from '../ui/separator'
 import { useWebDnnMobilenetModel } from '@/hooks/webDnn/useWebDnnMobilenetModel'
+import { toast } from 'sonner'
 
 const MAX_K = 5
 
@@ -65,21 +66,20 @@ export const MobilenetPlayground = () => {
     setRunningAll(true)
 
     try {
+      const newRows: BenchmarkRow[] = []
+
       const tfRow = await runMeasured(
         'TF',
         tensorflowbackend,
         () => tfPredictFromImage(imgEl, MAX_K),
         (res) => (typeof res === 'string' ? res : null)
       )
-      setRows((r) => [tfRow, ...r])
-
       const onnxRow = await runMeasured(
         'ONNX',
         'wasm',
         () => onnxPredictFromImage(imgEl, MAX_K),
         (res) => (typeof res === 'string' ? res : null)
       )
-      setRows((r) => [onnxRow, ...r])
 
       const webdnnRow = await runMeasured(
         'WebDNN',
@@ -87,11 +87,18 @@ export const MobilenetPlayground = () => {
         () => webdnnPredictFromImage(imgEl, MAX_K),
         (res) => (typeof res === 'string' ? res : null)
       )
-      setRows((r) => [webdnnRow, ...r])
+
+      newRows.push(tfRow)
+      newRows.push(onnxRow)
+      newRows.push(webdnnRow)
+
+      setRows((r) => [...newRows, ...r])
     } catch (e: any) {
       const msg = String(e?.message ?? e)
       if (msg.includes('Operator implementation for Clip')) {
-        alert(' Operator implementation for Clip, opset=13 does not exist.')
+        toast.error('Event has been created', {
+          description: 'Sunday, December 03, 2023 at 9:00 AM',
+        })
       } else {
         alert(`Error during prediction: ${msg}`)
       }

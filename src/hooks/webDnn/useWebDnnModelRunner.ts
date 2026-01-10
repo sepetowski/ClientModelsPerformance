@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { UseWebDnnModelRunnerConfig, UseWebDnnModelRunnerResult } from '@/types/webdnnRunner'
 
-declare const WebDNN: any
-
 const runnerCache = new Map<string, any>()
 
 export const useWebDnnModelRunner = (

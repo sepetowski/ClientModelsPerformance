@@ -14,7 +14,6 @@ import { runMeasured } from '@/lib/runMeasure'
 import { BenchmarkTable } from '../benchmark/benchmarkTable'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader } from '../ui/card'
-import { Car } from 'lucide-react'
 import { Button } from '../ui/button'
 
 export const EmnistPlayground = () => {
@@ -65,6 +64,7 @@ export const EmnistPlayground = () => {
     setRunningAll(true)
 
     try {
+      const newRows: BenchmarkRow[] = []
       const canvas = canvasRef.current
 
       const tfRow = await runMeasured(
@@ -73,7 +73,6 @@ export const EmnistPlayground = () => {
         () => tfPredictFromCanvas(canvas),
         (res) => (typeof res === 'string' ? res : null)
       )
-      setRows((r) => [tfRow, ...r])
 
       const onnxRow = await runMeasured(
         'ONNX',
@@ -81,7 +80,6 @@ export const EmnistPlayground = () => {
         () => onnxPredictFromCanvas(canvas),
         (res) => (typeof res === 'string' ? res : null)
       )
-      setRows((r) => [onnxRow, ...r])
 
       const webdnnRow = await runMeasured(
         'WebDNN',
@@ -89,7 +87,11 @@ export const EmnistPlayground = () => {
         () => webdnnPredictFromCanvas(canvas),
         (res) => (typeof res === 'string' ? res : null)
       )
-      setRows((r) => [webdnnRow, ...r])
+
+      newRows.push(tfRow)
+      newRows.push(onnxRow)
+      newRows.push(webdnnRow)
+      setRows((r) => [...newRows, ...r])
     } catch (e: any) {
       const msg = String(e?.message ?? e)
       alert(`Error during prediction: ${msg}`)
