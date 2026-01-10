@@ -1,14 +1,19 @@
-export type MobilenetTopItem = {
+import type { PredictResult } from './PredictResult'
+
+export interface MobilenetTopItem {
   index: number
   label: string
   prob: number
 }
 
-export type MobilenetModelResult = {
+export interface MobilenetModelResult {
   ready: boolean
   loadingModel: boolean
   predicting: boolean
-  prediction: string | null
   topK: MobilenetTopItem[]
-  predictFromImage: (img: HTMLImageElement | null, k?: number) => Promise<string | null>
+  predictFromImage: (img: HTMLImageElement | null, k?: number) => Promise<PredictFromImageResult>
+}
+
+export interface PredictFromImageResult extends PredictResult {
+  topK: MobilenetTopItem[]
 }

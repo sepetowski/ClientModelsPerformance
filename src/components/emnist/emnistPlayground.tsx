@@ -10,7 +10,6 @@ import { useTensorflowEmnistModel } from '@/hooks/tensorflow/useTensorflowEmnist
 import { useWebDnnEmnistModel } from '@/hooks/webDnn/useWebDnnEmnistModel'
 import { useOnnxEmnistModel } from '@/hooks/onxx/useOnnxEmnistModel'
 import type { BenchmarkRow } from '@/types/benchmark'
-import { runMeasured } from '@/lib/runMeasure'
 import { BenchmarkTable } from '../benchmark/benchmarkTable'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader } from '../ui/card'
@@ -63,41 +62,42 @@ export const EmnistPlayground = () => {
     if (!canvasRef.current) return
     setRunningAll(true)
 
-    try {
-      const newRows: BenchmarkRow[] = []
-      const canvas = canvasRef.current
+    const ts = Date.now()
+    const canvas = canvasRef.current
 
-      const tfRow = await runMeasured(
-        'TF',
-        tensorflowbackend,
-        () => tfPredictFromCanvas(canvas),
-        (res) => (typeof res === 'string' ? res : null)
-      )
+    const tfData = await tfPredictFromCanvas(canvas)
+    const onnxData = await onnxPredictFromCanvas(canvas)
+    const webdnnData = await webdnnPredictFromCanvas(canvas)
 
-      const onnxRow = await runMeasured(
-        'ONNX',
-        'wasm',
-        () => onnxPredictFromCanvas(canvas),
-        (res) => (typeof res === 'string' ? res : null)
-      )
+    const newRows: BenchmarkRow[] = [
+      {
+        id: crypto.randomUUID(),
+        ts,
+        model: 'TF',
+        backend: tensorflowbackend,
+        durationMs: tfData.timeProcess,
+        prediction: tfData.prediction,
+      },
+      {
+        id: crypto.randomUUID(),
+        ts,
+        model: 'ONNX',
+        backend: 'Wasm',
+        durationMs: onnxData.timeProcess,
+        prediction: onnxData.prediction,
+      },
+      {
+        id: crypto.randomUUID(),
+        ts,
+        model: 'WebDNN',
+        backend: webdnnBackend,
+        durationMs: webdnnData.timeProcess,
+        prediction: webdnnData.prediction,
+      },
+    ]
 
-      const webdnnRow = await runMeasured(
-        'WebDNN',
-        webdnnBackend,
-        () => webdnnPredictFromCanvas(canvas),
-        (res) => (typeof res === 'string' ? res : null)
-      )
-
-      newRows.push(tfRow)
-      newRows.push(onnxRow)
-      newRows.push(webdnnRow)
-      setRows((r) => [...newRows, ...r])
-    } catch (e: any) {
-      const msg = String(e?.message ?? e)
-      alert(`Error during prediction: ${msg}`)
-    } finally {
-      setRunningAll(false)
-    }
+    setRows((r) => [...newRows, ...r])
+    setRunningAll(false)
   }
   const isButtonDisabled =
     !canvasRef.current ||

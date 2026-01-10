@@ -28,18 +28,10 @@ import {
   min,
   compareStats,
 } from '@/lib/utils'
-import type { Stats } from '@/types/benchmark'
+import type { BenchmarkRow, Stats } from '@/types/benchmark'
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Card, CardContent, CardHeader } from '../ui/card'
-
-export type BenchmarkRow = {
-  id: string
-  ts: number
-  model: 'TF' | 'ONNX' | 'WebDNN'
-  backend: string
-  durationMs: number
-  prediction: string | null
-}
+import type { TimeProcess } from '@/types/PredictResult'
 
 type Props = {
   rows: BenchmarkRow[]
@@ -52,9 +44,23 @@ type Group = {
   rows: BenchmarkRow[]
 }
 
+type MetricKey = 'totalMs' | 'inferenceMs' | 'preprocessMs' | 'postprocessMs'
+
+const METRICS: { key: MetricKey; label: string }[] = [
+  { key: 'inferenceMs', label: 'Inference' },
+  { key: 'totalMs', label: 'Total' },
+  { key: 'preprocessMs', label: 'Preprocess' },
+  { key: 'postprocessMs', label: 'Postprocess' },
+]
+
 function ModelBadge({ model }: { model: BenchmarkRow['model'] }) {
   const variant = model === 'ONNX' ? 'default' : model === 'TF' ? 'secondary' : 'outline'
   return <Badge variant={variant}>{model}</Badge>
+}
+
+function getMetricValue(tp: TimeProcess | undefined, metric: MetricKey): number | null {
+  const v = tp?.[metric]
+  return typeof v === 'number' && Number.isFinite(v) ? v : null
 }
 
 export const BenchmarkTable = ({ rows, defaultGroupByModel = true }: Props) => {
@@ -79,6 +85,9 @@ export const BenchmarkTable = ({ rows, defaultGroupByModel = true }: Props) => {
   const pageSizeOptions = useMemo(() => [10, 25, 50, 100] as const, [])
   const [pageSize, setPageSize] = useState<(typeof pageSizeOptions)[number]>(25)
   const [pageIndex, setPageIndex] = useState(0)
+
+  // ✅ wybór metryki czasu
+  const [metric, setMetric] = useState<MetricKey>('inferenceMs')
 
   const filteredAll = useMemo(() => {
     return rows.filter((r) => selectedModels.has(r.model) && selectedBackends.has(r.backend))
@@ -149,22 +158,25 @@ export const BenchmarkTable = ({ rows, defaultGroupByModel = true }: Props) => {
     const m = new Map<string, Stats>()
 
     for (const g of statsGroups) {
-      const durations = g.rows.map((r) => r.durationMs)
+      // ✅ statystyki z wybranej metryki i tylko wartości liczbowych
+      const durations = g.rows
+        .map((r) => getMetricValue(r.durationMs, metric))
+        .filter((v): v is number => typeof v === 'number')
 
       m.set(g.key, {
         n: durations.length,
-        med: median(durations),
-        mean: mean(durations),
-        std: stdDev(durations),
-        min: min(durations),
-        max: max(durations),
-        p95: p95(durations),
-        p99: p99(durations),
+        med: durations.length ? median(durations) : null,
+        mean: durations.length ? mean(durations) : null,
+        std: durations.length ? stdDev(durations) : null,
+        min: durations.length ? min(durations) : null,
+        max: durations.length ? max(durations) : null,
+        p95: durations.length ? p95(durations) : null,
+        p99: durations.length ? p99(durations) : null,
       })
     }
 
     return m
-  }, [statsGroups])
+  }, [statsGroups, metric])
 
   function toggleModel(m: BenchmarkRow['model']) {
     setSelectedModels((prev) => {
@@ -197,6 +209,11 @@ export const BenchmarkTable = ({ rows, defaultGroupByModel = true }: Props) => {
     return entries[0]![0]
   }, [statsByKey, groupByModel])
 
+  const metricLabel = useMemo(
+    () => METRICS.find((m) => m.key === metric)?.label ?? metric,
+    [metric]
+  )
+
   return (
     <div className="h-full overflow-hidden">
       <Card className="max-h-[80vh] overflow-y-auto">
@@ -205,7 +222,7 @@ export const BenchmarkTable = ({ rows, defaultGroupByModel = true }: Props) => {
             <div className="rounded-xl border bg-background/60 p-4 shadow-sm">
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div className="flex flex-wrap items-center gap-1">
-                  Best stats: <span className="font-medium">{bestModelKey}*</span>
+                  Best stats ({metricLabel}): <span className="font-medium">{bestModelKey}*</span>
                 </div>
               </div>
               <p className="mt-2 text-xs text-muted-foreground">
@@ -215,6 +232,7 @@ export const BenchmarkTable = ({ rows, defaultGroupByModel = true }: Props) => {
             </div>
           )}
         </CardHeader>
+
         <CardContent>
           <div className="space-y-6">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -265,6 +283,28 @@ export const BenchmarkTable = ({ rows, defaultGroupByModel = true }: Props) => {
                   </DropdownMenuContent>
                 </DropdownMenu>
 
+                {/* ✅ wybór metryki */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button type="button" variant="outline" size="sm">
+                      Metric ({metricLabel})
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-56">
+                    <DropdownMenuLabel>Time metric</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {METRICS.map((m) => (
+                      <DropdownMenuCheckboxItem
+                        key={m.key}
+                        checked={metric === m.key}
+                        onCheckedChange={() => setMetric(m.key)}
+                      >
+                        {m.label}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
                 <Button
                   type="button"
                   variant="outline"
@@ -309,7 +349,7 @@ export const BenchmarkTable = ({ rows, defaultGroupByModel = true }: Props) => {
                     <TableHead className="w-[110px]">Time</TableHead>
                     <TableHead className="w-[90px]">Model</TableHead>
                     <TableHead>Backend</TableHead>
-                    <TableHead className="text-right">Duration</TableHead>
+                    <TableHead className="text-right">{metricLabel} (ms)</TableHead>
                     <TableHead className="text-right">Prediction</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -352,7 +392,7 @@ export const BenchmarkTable = ({ rows, defaultGroupByModel = true }: Props) => {
                                       </div>
                                     )}
 
-                                    <span className="text-xs text-muted-foreground ml-2">
+                                    <span className="ml-2 text-xs text-muted-foreground">
                                       n={s.n}
                                     </span>
                                   </div>
@@ -364,35 +404,30 @@ export const BenchmarkTable = ({ rows, defaultGroupByModel = true }: Props) => {
                                         {s.mean ? formatMs(s.mean) : '—'}
                                       </span>
                                     </span>
-
                                     <span>
                                       median{' '}
                                       <span className="font-mono">
                                         {s.med ? formatMs(s.med) : '—'}
                                       </span>
                                     </span>
-
                                     <span>
                                       std{' '}
                                       <span className="font-mono">
                                         {s.std ? formatMs(s.std) : '—'}
                                       </span>
                                     </span>
-
                                     <span>
                                       p95{' '}
                                       <span className="font-mono">
                                         {s.p95 ? formatMs(s.p95) : '—'}
                                       </span>
                                     </span>
-
                                     <span>
                                       p99{' '}
                                       <span className="font-mono">
                                         {s.p99 ? formatMs(s.p99) : '—'}
                                       </span>
                                     </span>
-
                                     <span>
                                       min/max{' '}
                                       <span className="font-mono">
@@ -406,24 +441,27 @@ export const BenchmarkTable = ({ rows, defaultGroupByModel = true }: Props) => {
                             </TableRow>
                           )}
 
-                          {g.rows.map((r) => (
-                            <TableRow key={r.id}>
-                              <TableCell className="font-mono text-xs">
-                                {formatTime(r.ts)}
-                              </TableCell>
-                              <TableCell>
-                                <ModelBadge model={r.model} />
-                              </TableCell>
-                              <TableCell className="font-mono text-xs">{r.backend}</TableCell>
-                              <TableCell className="text-right font-mono text-xs">
-                                {formatMs(r.durationMs)}
-                              </TableCell>
+                          {g.rows.map((r) => {
+                            const v = getMetricValue(r.durationMs, metric)
 
-                              <TableCell className="text-right font-semibold">
-                                {r.prediction ?? '—'}
-                              </TableCell>
-                            </TableRow>
-                          ))}
+                            return (
+                              <TableRow key={r.id}>
+                                <TableCell className="font-mono text-xs">
+                                  {formatTime(r.ts)}
+                                </TableCell>
+                                <TableCell>
+                                  <ModelBadge model={r.model} />
+                                </TableCell>
+                                <TableCell className="font-mono text-xs">{r.backend}</TableCell>
+                                <TableCell className="text-right font-mono text-xs">
+                                  {v !== null ? formatMs(v) : '—'}
+                                </TableCell>
+                                <TableCell className="text-right font-semibold">
+                                  {r.prediction ?? '—'}
+                                </TableCell>
+                              </TableRow>
+                            )
+                          })}
                         </Fragment>
                       )
                     })

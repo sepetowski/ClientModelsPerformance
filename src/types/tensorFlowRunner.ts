@@ -1,8 +1,8 @@
-import type { AvaibleBackendType } from './avaibleBackend'
+import type { AvaibleTensorflowBackendType } from './avaibleBackend'
 import * as tf from '@tensorflow/tfjs'
 
 export interface UseTensorflowModelRunnerConfig {
-  backend: AvaibleBackendType
+  backend: AvaibleTensorflowBackendType
   modelUrl: string
 }
 

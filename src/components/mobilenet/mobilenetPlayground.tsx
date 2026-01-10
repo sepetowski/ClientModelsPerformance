@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { BenchmarkTable, type BenchmarkRow } from '../benchmark/benchmarkTable'
+import { BenchmarkTable } from '../benchmark/benchmarkTable'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs'
 import { AvaibleTensorflowBackendSelector } from '../shared/avaibleTensorflowBackendSelector'
 import { AvaibleWebdnnBackendSelector } from '../shared/avaibleWebdnnBackendSelector copy'
@@ -10,13 +10,12 @@ import type { AvaibleTensorflowBackendType, AvaibleWebdnnBackendType } from '@/t
 import { ImagePiceker } from './imagePiceker'
 import { Card, CardContent } from '../ui/card'
 import { useTensorflowMobilenetModel } from '@/hooks/tensorflow/useTensorflowMobilenetModel'
-import { runMeasured } from '@/lib/runMeasure'
 import { Button } from '../ui/button'
 import { useOnnxMobilenetModel } from '@/hooks/onxx/useOnnxMobilenetModel'
 import { ResultsList } from './resultsList'
 import { Separator } from '../ui/separator'
 import { useWebDnnMobilenetModel } from '@/hooks/webDnn/useWebDnnMobilenetModel'
-import { toast } from 'sonner'
+import type { BenchmarkRow } from '@/types/benchmark'
 
 const MAX_K = 5
 
@@ -38,7 +37,6 @@ export const MobilenetPlayground = () => {
     ready: tfReady,
     loadingModel: tfLoading,
     predicting: tfPredicting,
-    prediction: tfPrediction,
     predictFromImage: tfPredictFromImage,
     topK: tfTopK,
   } = useTensorflowMobilenetModel(tensorflowbackend)
@@ -47,7 +45,6 @@ export const MobilenetPlayground = () => {
     ready: webdnnReady,
     loadingModel: webdnnLoading,
     predicting: webdnnPredicting,
-    prediction: webdnnPrediction,
     predictFromImage: webdnnPredictFromImage,
     topK: webdnnTopK,
   } = useWebDnnMobilenetModel(webdnnBackend)
@@ -56,7 +53,6 @@ export const MobilenetPlayground = () => {
     ready: onnxReady,
     loadingModel: onnxLoading,
     predicting: onnxPredicting,
-    prediction: onnxPrediction,
     predictFromImage: onnxPredictFromImage,
     topK: onnxTopK,
   } = useOnnxMobilenetModel()
@@ -65,46 +61,41 @@ export const MobilenetPlayground = () => {
     if (imgEl === null) return
     setRunningAll(true)
 
-    try {
-      const newRows: BenchmarkRow[] = []
+    const ts = Date.now()
 
-      const tfRow = await runMeasured(
-        'TF',
-        tensorflowbackend,
-        () => tfPredictFromImage(imgEl, MAX_K),
-        (res) => (typeof res === 'string' ? res : null)
-      )
-      const onnxRow = await runMeasured(
-        'ONNX',
-        'wasm',
-        () => onnxPredictFromImage(imgEl, MAX_K),
-        (res) => (typeof res === 'string' ? res : null)
-      )
+    const tfData = await tfPredictFromImage(imgEl, MAX_K)
+    const onnxData = await onnxPredictFromImage(imgEl, MAX_K)
+    const webdnnData = await webdnnPredictFromImage(imgEl, MAX_K)
 
-      const webdnnRow = await runMeasured(
-        'WebDNN',
-        webdnnBackend,
-        () => webdnnPredictFromImage(imgEl, MAX_K),
-        (res) => (typeof res === 'string' ? res : null)
-      )
+    const newRows: BenchmarkRow[] = [
+      {
+        id: crypto.randomUUID(),
+        ts,
+        model: 'TF',
+        backend: tensorflowbackend,
+        durationMs: tfData.timeProcess,
+        prediction: tfData.prediction,
+      },
+      {
+        id: crypto.randomUUID(),
+        ts,
+        model: 'ONNX',
+        backend: 'Wasm',
+        durationMs: onnxData.timeProcess,
+        prediction: onnxData.prediction,
+      },
+      {
+        id: crypto.randomUUID(),
+        ts,
+        model: 'WebDNN',
+        backend: webdnnBackend,
+        durationMs: webdnnData.timeProcess,
+        prediction: webdnnData.prediction,
+      },
+    ]
 
-      newRows.push(tfRow)
-      newRows.push(onnxRow)
-      newRows.push(webdnnRow)
-
-      setRows((r) => [...newRows, ...r])
-    } catch (e: any) {
-      const msg = String(e?.message ?? e)
-      if (msg.includes('Operator implementation for Clip')) {
-        toast.error('Event has been created', {
-          description: 'Sunday, December 03, 2023 at 9:00 AM',
-        })
-      } else {
-        alert(`Error during prediction: ${msg}`)
-      }
-    } finally {
-      setRunningAll(false)
-    }
+    setRows((r) => [...newRows, ...r])
+    setRunningAll(false)
   }
 
   const isButtonDisabled =
