@@ -10,8 +10,6 @@ import type {
 } from '@/types/mobilenetModelResult'
 import { useLabels } from '../useLabels'
 
-declare const WebDNN: any
-
 export const useWebDnnMobilenetModel = (
   backend: AvaibleWebdnnBackendType
 ): MobilenetModelResult => {
@@ -27,6 +25,10 @@ export const useWebDnnMobilenetModel = (
     img: HTMLImageElement | null,
     k = 5
   ): Promise<PredictFromImageResult> => {
+    let preprocessMs = 0
+    let inferenceMs = 0
+    let postprocessMs = 0
+
     const tTotal0 = performance.now()
 
     if (!runner || !img || labels?.length === 0) {
@@ -63,62 +65,68 @@ export const useWebDnnMobilenetModel = (
         }
       }
 
-      // -------- preprocess (img -> tensor) --------
+      let inputTensor: any
+      let probs: Float32Array | null = null
+
+      // -------- preprocess --------
       const tPre0 = performance.now()
+      try {
+        const imageData = imageElementToImageData(img)
+        const processed = preprocessMobilenetV2FromImageData(imageData, 224)
 
-      const imageData = imageElementToImageData(img)
-      const processed = preprocessMobilenetV2FromImageData(imageData, 224)
-
-      const inputTensor = new WebDNN.CPUTensor(
-        [1, processed.height, processed.width, 3],
-        'float32',
-        processed.data
-      )
-
-      const preprocessMs = performance.now() - tPre0
-
-      // -------- inference (runtime) --------
-      const tInf0 = performance.now()
-
-      const [output] = await runner.run([inputTensor])
-      const probs = output.data as Float32Array
-
-      const inferenceMs = performance.now() - tInf0
-
-      // -------- postprocess (topK) --------
-      const tPost0 = performance.now()
-
-      const kk = Math.max(1, Math.min(k, probs.length))
-      const items: MobilenetTopItem[] = []
-
-      for (let i = 0; i < probs.length; i++) {
-        items.push({
-          index: i,
-          prob: probs[i],
-          label: labels?.[i] ?? `class_${i}`,
-        })
+        inputTensor = new WebDNN.CPUTensor(
+          [1, processed.height, processed.width, 3],
+          'float32',
+          processed.data
+        )
+      } finally {
+        preprocessMs = performance.now() - tPre0
       }
 
-      items.sort((a, b) => b.prob - a.prob)
-      const best = items.slice(0, kk)
+      // -------- inference --------
+      const tInf0 = performance.now()
+      try {
+        const [output] = await runner.run([inputTensor])
+        probs = output.data as Float32Array
+      } finally {
+        inferenceMs = performance.now() - tInf0
+      }
 
-      setTopK(best)
-      const top1 = best[0]?.label ?? null
+      if (!probs) throw new Error('Inference failed (no output)')
 
-      const postprocessMs = performance.now() - tPost0
-      const totalMs = performance.now() - tTotal0
+      // -------- postprocess --------
+      const tPost0 = performance.now()
+      try {
+        const kk = Math.max(1, Math.min(k, probs.length))
+        const items: MobilenetTopItem[] = []
 
-      return {
-        prediction: top1,
-        topK: best,
-        hasError: false,
-        errorMessage: null,
-        timeProcess: {
-          preprocessMs,
-          inferenceMs,
-          postprocessMs,
-          totalMs,
-        },
+        for (let i = 0; i < probs.length; i++) {
+          items.push({
+            index: i,
+            prob: probs[i],
+            label: labels?.[i] ?? `class_${i}`,
+          })
+        }
+
+        items.sort((a, b) => b.prob - a.prob)
+        const best = items.slice(0, kk)
+
+        setTopK(best)
+
+        return {
+          prediction: best[0]?.label ?? null,
+          topK: best,
+          hasError: false,
+          errorMessage: null,
+          timeProcess: {
+            preprocessMs,
+            inferenceMs,
+            postprocessMs: performance.now() - tPost0,
+            totalMs: performance.now() - tTotal0,
+          },
+        }
+      } finally {
+        postprocessMs = performance.now() - tPost0
       }
     } catch (e: any) {
       return {
@@ -127,9 +135,9 @@ export const useWebDnnMobilenetModel = (
         hasError: true,
         errorMessage: String(e?.message ?? e),
         timeProcess: {
-          preprocessMs: 0,
-          inferenceMs: 0,
-          postprocessMs: 0,
+          preprocessMs,
+          inferenceMs,
+          postprocessMs,
           totalMs: performance.now() - tTotal0,
         },
       }

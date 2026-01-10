@@ -16,12 +16,15 @@ import { ResultsList } from './resultsList'
 import { Separator } from '../ui/separator'
 import { useWebDnnMobilenetModel } from '@/hooks/webDnn/useWebDnnMobilenetModel'
 import type { BenchmarkRow } from '@/types/benchmark'
+import { predictResultToBenchmarkRow } from '@/lib/predictResultToBenchmarkRow'
+import { useShowPredictError } from '@/hooks/useShowPredictError'
 
 const MAX_K = 5
 
 export const MobilenetPlayground = () => {
   const [rows, setRows] = useState<BenchmarkRow[]>([])
   const [runningAll, setRunningAll] = useState(false)
+  const { showErrors } = useShowPredictError()
 
   const [imgEl, setImgEl] = useState<HTMLImageElement | null>(null)
 
@@ -61,37 +64,20 @@ export const MobilenetPlayground = () => {
     if (imgEl === null) return
     setRunningAll(true)
 
-    const ts = Date.now()
-
     const tfData = await tfPredictFromImage(imgEl, MAX_K)
     const onnxData = await onnxPredictFromImage(imgEl, MAX_K)
     const webdnnData = await webdnnPredictFromImage(imgEl, MAX_K)
 
+    showErrors([
+      { result: tfData, context: 'TensorFlow.js' },
+      { result: onnxData, context: 'ONNX Runtime' },
+      { result: webdnnData, context: 'WebDNN' },
+    ])
+
     const newRows: BenchmarkRow[] = [
-      {
-        id: crypto.randomUUID(),
-        ts,
-        model: 'TF',
-        backend: tensorflowbackend,
-        durationMs: tfData.timeProcess,
-        prediction: tfData.prediction,
-      },
-      {
-        id: crypto.randomUUID(),
-        ts,
-        model: 'ONNX',
-        backend: 'Wasm',
-        durationMs: onnxData.timeProcess,
-        prediction: onnxData.prediction,
-      },
-      {
-        id: crypto.randomUUID(),
-        ts,
-        model: 'WebDNN',
-        backend: webdnnBackend,
-        durationMs: webdnnData.timeProcess,
-        prediction: webdnnData.prediction,
-      },
+      predictResultToBenchmarkRow(tfData, tensorflowbackend, 'TF'),
+      predictResultToBenchmarkRow(onnxData, 'wasm', 'ONNX'),
+      predictResultToBenchmarkRow(webdnnData, webdnnBackend, 'WebDNN'),
     ]
 
     setRows((r) => [...newRows, ...r])
@@ -122,7 +108,13 @@ export const MobilenetPlayground = () => {
         <header className="space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight">Mobilenet v2 model benchmark</h1>
           <p className="text-sm text-muted-foreground">
-            Lorem ipsum dolor, sit amet consectetur adipisicing elit. Natus, officia.
+            Import an image from your device or provide an image URL, then compare predictions and
+            performance across TensorFlow, ONNX, and WebDNN models directly in the browser.
+            <br />
+            <strong>Note:</strong> WebDNN currently does{' '}
+            <strong>not support the MobileNet model</strong>. Results from WebDNN will still appear
+            in the table for performance comparison, but no prediction will be generated due to
+            library limitations.
           </p>
         </header>
 

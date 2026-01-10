@@ -63,6 +63,10 @@ function getMetricValue(tp: TimeProcess | undefined, metric: MetricKey): number 
   return typeof v === 'number' && Number.isFinite(v) ? v : null
 }
 
+function StatusBadge({ ok }: { ok: boolean }) {
+  return ok ? <Badge variant="secondary">OK</Badge> : <Badge variant="destructive">FAILED</Badge>
+}
+
 export const BenchmarkTable = ({ rows, defaultGroupByModel = true }: Props) => {
   const allModels = useMemo(() => ['TF', 'ONNX', 'WebDNN'] as const, [])
   const allBackends = useMemo(() => Array.from(new Set(rows.map((r) => r.backend))).sort(), [rows])
@@ -86,7 +90,6 @@ export const BenchmarkTable = ({ rows, defaultGroupByModel = true }: Props) => {
   const [pageSize, setPageSize] = useState<(typeof pageSizeOptions)[number]>(25)
   const [pageIndex, setPageIndex] = useState(0)
 
-  // ✅ wybór metryki czasu
   const [metric, setMetric] = useState<MetricKey>('inferenceMs')
 
   const filteredAll = useMemo(() => {
@@ -158,10 +161,10 @@ export const BenchmarkTable = ({ rows, defaultGroupByModel = true }: Props) => {
     const m = new Map<string, Stats>()
 
     for (const g of statsGroups) {
-      // ✅ statystyki z wybranej metryki i tylko wartości liczbowych
       const durations = g.rows
+        .filter((r) => r.prediction !== null)
         .map((r) => getMetricValue(r.durationMs, metric))
-        .filter((v): v is number => typeof v === 'number')
+        .filter((v): v is number => typeof v === 'number' && v > 0)
 
       m.set(g.key, {
         n: durations.length,
@@ -349,6 +352,7 @@ export const BenchmarkTable = ({ rows, defaultGroupByModel = true }: Props) => {
                     <TableHead className="w-[110px]">Time</TableHead>
                     <TableHead className="w-[90px]">Model</TableHead>
                     <TableHead>Backend</TableHead>
+                    <TableHead className="w-[110px]">Status</TableHead>
                     <TableHead className="text-right">{metricLabel} (ms)</TableHead>
                     <TableHead className="text-right">Prediction</TableHead>
                   </TableRow>
@@ -358,7 +362,7 @@ export const BenchmarkTable = ({ rows, defaultGroupByModel = true }: Props) => {
                   {filteredAll.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={5}
+                        colSpan={6}
                         className="py-10 text-center text-sm text-muted-foreground"
                       >
                         No rows match your filters.
@@ -381,17 +385,9 @@ export const BenchmarkTable = ({ rows, defaultGroupByModel = true }: Props) => {
                         <Fragment key={g.key}>
                           {groupByModel && (
                             <TableRow className="bg-muted/40">
-                              <TableCell colSpan={5}>
+                              <TableCell colSpan={6}>
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                   <div className="flex items-center gap-2">
-                                    {g.key === 'all' ? (
-                                      <span className="font-medium">{g.title}</span>
-                                    ) : (
-                                      <div className="flex items-center gap-2">
-                                        <ModelBadge model={g.key as BenchmarkRow['model']} />
-                                      </div>
-                                    )}
-
                                     <span className="ml-2 text-xs text-muted-foreground">
                                       n={s.n}
                                     </span>
@@ -443,21 +439,34 @@ export const BenchmarkTable = ({ rows, defaultGroupByModel = true }: Props) => {
 
                           {g.rows.map((r) => {
                             const v = getMetricValue(r.durationMs, metric)
+                            const ok = r.prediction !== null
 
                             return (
-                              <TableRow key={r.id}>
+                              <TableRow key={r.id} className={!ok ? 'opacity-60' : undefined}>
                                 <TableCell className="font-mono text-xs">
                                   {formatTime(r.ts)}
                                 </TableCell>
+
                                 <TableCell>
                                   <ModelBadge model={r.model} />
                                 </TableCell>
+
                                 <TableCell className="font-mono text-xs">{r.backend}</TableCell>
+
+                                <TableCell>
+                                  <StatusBadge ok={ok} />
+                                </TableCell>
+
                                 <TableCell className="text-right font-mono text-xs">
                                   {v !== null ? formatMs(v) : '—'}
                                 </TableCell>
+
                                 <TableCell className="text-right font-semibold">
-                                  {r.prediction ?? '—'}
+                                  {ok ? (
+                                    r.prediction
+                                  ) : (
+                                    <span className="text-muted-foreground">not predicted</span>
+                                  )}
                                 </TableCell>
                               </TableRow>
                             )

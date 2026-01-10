@@ -5,8 +5,6 @@ import type { AvaibleWebdnnBackendType } from '@/types/avaibleBackend'
 import type { EmnistModelResult, PredictFromCanvasResult } from '@/types/emnistModelResult'
 import { useLabels } from '../useLabels'
 
-declare const WebDNN: any
-
 export const useWebDnnEmnistModel = (backend: AvaibleWebdnnBackendType): EmnistModelResult => {
   const options = useMemo(() => ({ backend, modelDir: '/models/onxx/emnist/' }), [backend])
   const { runner, backendReady, loadingModel } = useWebDnnModelRunner(options)
@@ -18,10 +16,15 @@ export const useWebDnnEmnistModel = (backend: AvaibleWebdnnBackendType): EmnistM
   const predictFromCanvas = async (
     canvas: HTMLCanvasElement | null
   ): Promise<PredictFromCanvasResult> => {
+    let preprocessMs = 0
+    let inferenceMs = 0
+    let postprocessMs = 0
+
     const tTotal0 = performance.now()
 
     if (!runner || !canvas || (labels?.length ?? 0) === 0) {
-      const res: PredictFromCanvasResult = {
+      setPrediction(null)
+      return {
         prediction: null,
         hasError: true,
         errorMessage: 'Model not ready',
@@ -32,64 +35,69 @@ export const useWebDnnEmnistModel = (backend: AvaibleWebdnnBackendType): EmnistM
           totalMs: performance.now() - tTotal0,
         },
       }
-      setPrediction(null)
-      return res
     }
 
     setPredicting(true)
 
     try {
+      let probs: Float32Array | null = null
+
       // -------- preprocess (canvas -> tensor data) --------
       const tPre0 = performance.now()
+      try {
+        const processed = preprocessDigitCanvas(canvas)
 
-      const processed = preprocessDigitCanvas(canvas)
-      if (!processed) {
-        // pusty rysunek traktujemy jako “brak predykcji”, ale bez wyjątku
-        const res: PredictFromCanvasResult = {
-          prediction: null,
-          hasError: true,
-          errorMessage: 'Empty drawing',
-          timeProcess: {
-            preprocessMs: performance.now() - tPre0,
-            inferenceMs: 0,
-            postprocessMs: 0,
-            totalMs: performance.now() - tTotal0,
-          },
+        if (!processed) {
+          setPrediction(null)
+          return {
+            prediction: null,
+            hasError: true,
+            errorMessage: 'Empty drawing',
+            timeProcess: {
+              preprocessMs: performance.now() - tPre0,
+              inferenceMs: 0,
+              postprocessMs: 0,
+              totalMs: performance.now() - tTotal0,
+            },
+          }
         }
-        setPrediction(null)
-        return res
+
+        const { data, width, height } = processed
+        const inputTensor = new WebDNN.CPUTensor([1, height, width, 1], 'float32', data)
+
+        // -------- inference (runtime) --------
+        const tInf0 = performance.now()
+        try {
+          const [output] = await runner.run([inputTensor])
+          probs = output.data as Float32Array
+        } finally {
+          inferenceMs = performance.now() - tInf0
+        }
+      } finally {
+        preprocessMs = performance.now() - tPre0
       }
 
-      const { data, width, height } = processed
-      const inputTensor = new WebDNN.CPUTensor([1, height, width, 1], 'float32', data)
-
-      const preprocessMs = performance.now() - tPre0
-
-      // -------- inference (runtime) --------
-      const tInf0 = performance.now()
-
-      const [output] = await runner.run([inputTensor])
-      const probs = output.data as Float32Array
-
-      const inferenceMs = performance.now() - tInf0
+      if (!probs) throw new Error('Inference failed (no output)')
 
       // -------- postprocess (argmax) --------
       const tPost0 = performance.now()
+      let label: string | null = null
+      try {
+        let maxIdx = 0
+        let maxVal = probs[0] ?? -Infinity
 
-      let maxIdx = 0
-      let maxVal = probs[0] ?? -Infinity
-      for (let i = 1; i < probs.length; i++) {
-        if (probs[i] > maxVal) {
-          maxVal = probs[i]
-          maxIdx = i
+        for (let i = 1; i < probs.length; i++) {
+          if (probs[i] > maxVal) {
+            maxVal = probs[i]
+            maxIdx = i
+          }
         }
+
+        label = labels?.[maxIdx] ?? null
+        setPrediction(label)
+      } finally {
+        postprocessMs = performance.now() - tPost0
       }
-
-      const label = labels?.[maxIdx] ?? null
-      setPrediction(label)
-
-      const postprocessMs = performance.now() - tPost0
-      const totalMs = performance.now() - tTotal0
 
       return {
         prediction: label,
@@ -99,23 +107,22 @@ export const useWebDnnEmnistModel = (backend: AvaibleWebdnnBackendType): EmnistM
           preprocessMs,
           inferenceMs,
           postprocessMs,
-          totalMs,
+          totalMs: performance.now() - tTotal0,
         },
       }
     } catch (e: any) {
-      const res: PredictFromCanvasResult = {
+      setPrediction(null)
+      return {
         prediction: null,
         hasError: true,
         errorMessage: String(e?.message ?? e),
         timeProcess: {
-          preprocessMs: 0,
-          inferenceMs: 0,
-          postprocessMs: 0,
+          preprocessMs,
+          inferenceMs,
+          postprocessMs,
           totalMs: performance.now() - tTotal0,
         },
       }
-      setPrediction(null)
-      return res
     } finally {
       setPredicting(false)
     }

@@ -14,9 +14,12 @@ import { BenchmarkTable } from '../benchmark/benchmarkTable'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader } from '../ui/card'
 import { Button } from '../ui/button'
+import { predictResultToBenchmarkRow } from '@/lib/predictResultToBenchmarkRow'
+import { useShowPredictError } from '@/hooks/useShowPredictError'
 
 export const EmnistPlayground = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const { showErrors } = useShowPredictError()
 
   const [tensorflowbackend, setTensorflowBackend] = useState<AvaibleTensorflowBackendType>(
     AVAIBLE_TENSORFLOW_BACKENDS.CPU
@@ -62,38 +65,22 @@ export const EmnistPlayground = () => {
     if (!canvasRef.current) return
     setRunningAll(true)
 
-    const ts = Date.now()
     const canvas = canvasRef.current
 
     const tfData = await tfPredictFromCanvas(canvas)
     const onnxData = await onnxPredictFromCanvas(canvas)
     const webdnnData = await webdnnPredictFromCanvas(canvas)
 
+    showErrors([
+      { result: tfData, context: 'TensorFlow.js' },
+      { result: onnxData, context: 'ONNX Runtime' },
+      { result: webdnnData, context: 'WebDNN' },
+    ])
+
     const newRows: BenchmarkRow[] = [
-      {
-        id: crypto.randomUUID(),
-        ts,
-        model: 'TF',
-        backend: tensorflowbackend,
-        durationMs: tfData.timeProcess,
-        prediction: tfData.prediction,
-      },
-      {
-        id: crypto.randomUUID(),
-        ts,
-        model: 'ONNX',
-        backend: 'Wasm',
-        durationMs: onnxData.timeProcess,
-        prediction: onnxData.prediction,
-      },
-      {
-        id: crypto.randomUUID(),
-        ts,
-        model: 'WebDNN',
-        backend: webdnnBackend,
-        durationMs: webdnnData.timeProcess,
-        prediction: webdnnData.prediction,
-      },
+      predictResultToBenchmarkRow(tfData, tensorflowbackend, 'TF'),
+      predictResultToBenchmarkRow(onnxData, 'wasm', 'ONNX'),
+      predictResultToBenchmarkRow(webdnnData, webdnnBackend, 'WebDNN'),
     ]
 
     setRows((r) => [...newRows, ...r])

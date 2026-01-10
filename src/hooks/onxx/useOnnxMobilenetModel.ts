@@ -23,9 +23,13 @@ export const useOnnxMobilenetModel = (): MobilenetModelResult => {
     img: HTMLImageElement | null,
     k = 5
   ): Promise<PredictFromImageResult> => {
+    let preprocessMs = 0
+    let inferenceMs = 0
+    let postprocessMs = 0
+
     const tTotal0 = performance.now()
 
-    if (!session || !img || labels?.length === 0)
+    if (!session || !img || labels?.length === 0) {
       return {
         prediction: null,
         topK: [],
@@ -38,6 +42,7 @@ export const useOnnxMobilenetModel = (): MobilenetModelResult => {
           totalMs: performance.now() - tTotal0,
         },
       }
+    }
 
     setPredicting(true)
 
@@ -58,60 +63,67 @@ export const useOnnxMobilenetModel = (): MobilenetModelResult => {
         }
       }
 
+      let probs: Float32Array | null = null
+
       // -------- preprocess (img -> tensor) --------
       const tPre0 = performance.now()
+      let feeds: Record<string, ort.Tensor> | null = null
+      let outputName = ''
+      try {
+        const imageData = imageElementToImageData(img)
+        const processed = preprocessMobilenetV2FromImageData(imageData, 224)
 
-      const imageData = imageElementToImageData(img)
-      const processed = preprocessMobilenetV2FromImageData(imageData, 224)
+        const inputName = session.inputNames[0]
+        outputName = session.outputNames[0]
 
-      const inputName = session.inputNames[0]
-      const outputName = session.outputNames[0]
+        const inputTensor = new ort.Tensor('float32', processed.data, [
+          1,
+          processed.height,
+          processed.width,
+          3,
+        ])
 
-      const inputTensor = new ort.Tensor('float32', processed.data, [
-        1,
-        processed.height,
-        processed.width,
-        3,
-      ])
-
-      const feeds: Record<string, ort.Tensor> = {
-        [inputName]: inputTensor,
+        feeds = { [inputName]: inputTensor }
+      } finally {
+        preprocessMs = performance.now() - tPre0
       }
-
-      const preprocessMs = performance.now() - tPre0
 
       // -------- inference (runtime) --------
       const tInf0 = performance.now()
+      try {
+        const outputs = await session.run(feeds!)
+        const output = outputs[outputName] as ort.Tensor
+        probs = output.data as Float32Array
+      } finally {
+        inferenceMs = performance.now() - tInf0
+      }
 
-      const outputs = await session.run(feeds)
-      const output = outputs[outputName] as ort.Tensor
-      const probs = output.data as Float32Array
-
-      const inferenceMs = performance.now() - tInf0
+      if (!probs) throw new Error('Inference failed (no output)')
 
       // -------- postprocess (topK) --------
       const tPost0 = performance.now()
+      let best: MobilenetTopItem[] = []
+      let top1: string | null = null
+      try {
+        const kk = Math.max(1, Math.min(k, probs.length))
+        const items: MobilenetTopItem[] = []
 
-      const kk = Math.max(1, Math.min(k, probs.length))
-      const items: MobilenetTopItem[] = []
+        for (let i = 0; i < probs.length; i++) {
+          items.push({
+            index: i,
+            prob: probs[i],
+            label: labels?.[i] ?? `class_${i}`,
+          })
+        }
 
-      for (let i = 0; i < probs.length; i++) {
-        items.push({
-          index: i,
-          prob: probs[i],
-          label: labels?.[i] ?? `class_${i}`,
-        })
+        items.sort((a, b) => b.prob - a.prob)
+        best = items.slice(0, kk)
+
+        setTopK(best)
+        top1 = best[0]?.label ?? null
+      } finally {
+        postprocessMs = performance.now() - tPost0
       }
-
-      items.sort((a, b) => b.prob - a.prob)
-      const best = items.slice(0, kk)
-
-      setTopK(best)
-
-      const top1 = best[0]?.label ?? null
-
-      const postprocessMs = performance.now() - tPost0
-      const totalMs = performance.now() - tTotal0
 
       return {
         prediction: top1,
@@ -122,7 +134,7 @@ export const useOnnxMobilenetModel = (): MobilenetModelResult => {
           preprocessMs,
           inferenceMs,
           postprocessMs,
-          totalMs,
+          totalMs: performance.now() - tTotal0,
         },
       }
     } catch (e: any) {
@@ -132,9 +144,9 @@ export const useOnnxMobilenetModel = (): MobilenetModelResult => {
         hasError: true,
         errorMessage: String(e?.message ?? e),
         timeProcess: {
-          preprocessMs: 0,
-          inferenceMs: 0,
-          postprocessMs: 0,
+          preprocessMs,
+          inferenceMs,
+          postprocessMs,
           totalMs: performance.now() - tTotal0,
         },
       }

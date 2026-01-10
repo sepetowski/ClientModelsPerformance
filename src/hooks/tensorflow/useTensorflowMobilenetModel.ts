@@ -29,6 +29,10 @@ export const useTensorflowMobilenetModel = (
     img: HTMLImageElement | null,
     k = 5
   ): Promise<PredictFromImageResult> => {
+    let preprocessMs = 0
+    let inferenceMs = 0
+    let postprocessMs = 0
+
     const tTotal0 = performance.now()
 
     if (!model || !img || labels?.length === 0) {
@@ -48,6 +52,9 @@ export const useTensorflowMobilenetModel = (
 
     setPredicting(true)
 
+    let input: tf.Tensor | null = null
+    let output: tf.Tensor | null = null
+
     try {
       if (!img.complete || img.naturalWidth === 0) {
         setTopK([])
@@ -65,55 +72,55 @@ export const useTensorflowMobilenetModel = (
         }
       }
 
-      // -------- preprocess (img -> tensor) --------
+      let probs: Float32Array | null = null
+
+      // -------- preprocess --------
       const tPre0 = performance.now()
+      try {
+        const imageData = imageElementToImageData(img)
+        const processed = preprocessMobilenetV2FromImageData(imageData, 224)
 
-      const imageData = imageElementToImageData(img)
-      const processed = preprocessMobilenetV2FromImageData(imageData, 224)
-
-      const input = tf.tensor4d(
-        processed.data,
-        [1, processed.height, processed.width, 3],
-        'float32'
-      )
-
-      const preprocessMs = performance.now() - tPre0
-
-      // -------- inference (runtime) --------
-      const tInf0 = performance.now()
-
-      const output = model.predict(input) as tf.Tensor
-      const probs = await output.data()
-
-      const inferenceMs = performance.now() - tInf0
-
-      // ważne: sprzątanie po inferencji
-      input.dispose()
-      output.dispose()
-
-      // -------- postprocess (topK) --------
-      const tPost0 = performance.now()
-
-      const kk = Math.max(1, Math.min(k, probs.length))
-      const items: MobilenetTopItem[] = []
-
-      for (let i = 0; i < probs.length; i++) {
-        items.push({
-          index: i,
-          prob: probs[i],
-          label: labels?.[i] ?? `class_${i}`,
-        })
+        input = tf.tensor4d(processed.data, [1, processed.height, processed.width, 3], 'float32')
+      } finally {
+        preprocessMs = performance.now() - tPre0
       }
 
-      items.sort((a, b) => b.prob - a.prob)
-      const best = items.slice(0, kk)
+      // -------- inference (predict + readback) --------
+      const tInf0 = performance.now()
+      try {
+        output = model.predict(input!) as tf.Tensor
+        probs = (await output.data()) as Float32Array
+      } finally {
+        inferenceMs = performance.now() - tInf0
+      }
 
-      setTopK(best)
+      if (!probs) throw new Error('Inference failed (no output)')
 
-      const top1 = best[0]?.label ?? null
+      // -------- postprocess --------
+      const tPost0 = performance.now()
+      let best: MobilenetTopItem[] = []
+      let top1: string | null = null
 
-      const postprocessMs = performance.now() - tPost0
-      const totalMs = performance.now() - tTotal0
+      try {
+        const kk = Math.max(1, Math.min(k, probs.length))
+        const items: MobilenetTopItem[] = []
+
+        for (let i = 0; i < probs.length; i++) {
+          items.push({
+            index: i,
+            prob: probs[i],
+            label: labels?.[i] ?? `class_${i}`,
+          })
+        }
+
+        items.sort((a, b) => b.prob - a.prob)
+        best = items.slice(0, kk)
+
+        setTopK(best)
+        top1 = best[0]?.label ?? null
+      } finally {
+        postprocessMs = performance.now() - tPost0
+      }
 
       return {
         prediction: top1,
@@ -124,7 +131,7 @@ export const useTensorflowMobilenetModel = (
           preprocessMs,
           inferenceMs,
           postprocessMs,
-          totalMs,
+          totalMs: performance.now() - tTotal0,
         },
       }
     } catch (e: any) {
@@ -134,13 +141,15 @@ export const useTensorflowMobilenetModel = (
         hasError: true,
         errorMessage: String(e?.message ?? e),
         timeProcess: {
-          preprocessMs: 0,
-          inferenceMs: 0,
-          postprocessMs: 0,
+          preprocessMs,
+          inferenceMs,
+          postprocessMs,
           totalMs: performance.now() - tTotal0,
         },
       }
     } finally {
+      if (input) input.dispose()
+      if (output) output.dispose()
       setPredicting(false)
     }
   }

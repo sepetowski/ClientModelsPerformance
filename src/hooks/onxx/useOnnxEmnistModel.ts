@@ -17,10 +17,15 @@ export const useOnnxEmnistModel = (): EmnistModelResult => {
   const predictFromCanvas = async (
     canvas: HTMLCanvasElement | null
   ): Promise<PredictFromCanvasResult> => {
+    let preprocessMs = 0
+    let inferenceMs = 0
+    let postprocessMs = 0
+
     const tTotal0 = performance.now()
 
     if (!session || !canvas || (labels?.length ?? 0) === 0) {
-      const res: PredictFromCanvasResult = {
+      setPrediction(null)
+      return {
         prediction: null,
         hasError: true,
         errorMessage: 'Model not ready',
@@ -31,72 +36,78 @@ export const useOnnxEmnistModel = (): EmnistModelResult => {
           totalMs: performance.now() - tTotal0,
         },
       }
-      setPrediction(null)
-      return res
     }
 
     setPredicting(true)
 
     try {
-      // -------- preprocess (canvas -> tensor data) --------
+      let probs: Float32Array | null = null
+
+      // -------- preprocess --------
       const tPre0 = performance.now()
+      let feeds: Record<string, ort.Tensor> | null = null
+      let outputName = ''
+      try {
+        const processed = preprocessDigitCanvas(canvas)
 
-      const processed = preprocessDigitCanvas(canvas)
-      if (!processed) {
-        const res: PredictFromCanvasResult = {
-          prediction: null,
-          hasError: true,
-          errorMessage: 'Empty drawing',
-          timeProcess: {
-            preprocessMs: performance.now() - tPre0,
-            inferenceMs: 0,
-            postprocessMs: 0,
-            totalMs: performance.now() - tTotal0,
-          },
+        if (!processed) {
+          setPrediction(null)
+          return {
+            prediction: null,
+            hasError: true,
+            errorMessage: 'Empty drawing',
+            timeProcess: {
+              preprocessMs: performance.now() - tPre0,
+              inferenceMs: 0,
+              postprocessMs: 0,
+              totalMs: performance.now() - tTotal0,
+            },
+          }
         }
-        setPrediction(null)
-        return res
+
+        const { data, width, height } = processed
+        const inputName = session.inputNames[0]
+        outputName = session.outputNames[0]
+
+        // [1, 28, 28, 1]
+        const inputTensor = new ort.Tensor('float32', data, [1, height, width, 1])
+
+        feeds = { [inputName]: inputTensor }
+      } finally {
+        preprocessMs = performance.now() - tPre0
       }
 
-      const { data, width, height } = processed
-      const inputName = session.inputNames[0]
-      const outputName = session.outputNames[0]
-
-      // [1, 28, 28, 1]
-      const inputTensor = new ort.Tensor('float32', data, [1, height, width, 1])
-
-      const feeds: Record<string, ort.Tensor> = {
-        [inputName]: inputTensor,
-      }
-
-      const preprocessMs = performance.now() - tPre0
-
-      // -------- inference (runtime) --------
+      // -------- inference --------
       const tInf0 = performance.now()
-
-      const outputs = await session.run(feeds)
-      const output = outputs[outputName] as ort.Tensor
-      const probs = output.data as Float32Array
-
-      const inferenceMs = performance.now() - tInf0
-
-      // -------- postprocess (argmax) --------
-      const tPost0 = performance.now()
-
-      let maxIdx = 0
-      let maxVal = probs[0] ?? -Infinity
-      for (let i = 1; i < probs.length; i++) {
-        if (probs[i] > maxVal) {
-          maxVal = probs[i]
-          maxIdx = i
-        }
+      try {
+        const outputs = await session.run(feeds!)
+        const output = outputs[outputName] as ort.Tensor
+        probs = output.data as Float32Array
+      } finally {
+        inferenceMs = performance.now() - tInf0
       }
 
-      const label = labels?.[maxIdx] ?? null
-      setPrediction(label)
+      if (!probs) throw new Error('Inference failed (no output)')
 
-      const postprocessMs = performance.now() - tPost0
-      const totalMs = performance.now() - tTotal0
+      // -------- postprocess --------
+      const tPost0 = performance.now()
+      let label: string | null = null
+      try {
+        let maxIdx = 0
+        let maxVal = probs[0] ?? -Infinity
+
+        for (let i = 1; i < probs.length; i++) {
+          if (probs[i] > maxVal) {
+            maxVal = probs[i]
+            maxIdx = i
+          }
+        }
+
+        label = labels?.[maxIdx] ?? null
+        setPrediction(label)
+      } finally {
+        postprocessMs = performance.now() - tPost0
+      }
 
       return {
         prediction: label,
@@ -106,23 +117,22 @@ export const useOnnxEmnistModel = (): EmnistModelResult => {
           preprocessMs,
           inferenceMs,
           postprocessMs,
-          totalMs,
+          totalMs: performance.now() - tTotal0,
         },
       }
     } catch (e: any) {
-      const res: PredictFromCanvasResult = {
+      setPrediction(null)
+      return {
         prediction: null,
         hasError: true,
         errorMessage: String(e?.message ?? e),
         timeProcess: {
-          preprocessMs: 0,
-          inferenceMs: 0,
-          postprocessMs: 0,
+          preprocessMs,
+          inferenceMs,
+          postprocessMs,
           totalMs: performance.now() - tTotal0,
         },
       }
-      setPrediction(null)
-      return res
     } finally {
       setPredicting(false)
     }
