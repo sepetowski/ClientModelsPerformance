@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { BenchmarkTable, type BenchmarkRow } from '../benchmark/benchmarkTable'
+import { BenchmarkTable } from '../benchmark/benchmarkTable'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs'
 import { AvaibleTensorflowBackendSelector } from '../shared/avaibleTensorflowBackendSelector'
 import { AvaibleWebdnnBackendSelector } from '../shared/avaibleWebdnnBackendSelector copy'
@@ -10,18 +10,21 @@ import type { AvaibleTensorflowBackendType, AvaibleWebdnnBackendType } from '@/t
 import { ImagePiceker } from './imagePiceker'
 import { Card, CardContent } from '../ui/card'
 import { useTensorflowMobilenetModel } from '@/hooks/tensorflow/useTensorflowMobilenetModel'
-import { runMeasured } from '@/lib/runMeasure'
 import { Button } from '../ui/button'
 import { useOnnxMobilenetModel } from '@/hooks/onxx/useOnnxMobilenetModel'
 import { ResultsList } from './resultsList'
 import { Separator } from '../ui/separator'
 import { useWebDnnMobilenetModel } from '@/hooks/webDnn/useWebDnnMobilenetModel'
+import type { BenchmarkRow } from '@/types/benchmark'
+import { predictResultToBenchmarkRow } from '@/lib/predictResultToBenchmarkRow'
+import { useShowPredictError } from '@/hooks/useShowPredictError'
 
 const MAX_K = 5
 
 export const MobilenetPlayground = () => {
   const [rows, setRows] = useState<BenchmarkRow[]>([])
   const [runningAll, setRunningAll] = useState(false)
+  const { showErrors } = useShowPredictError()
 
   const [imgEl, setImgEl] = useState<HTMLImageElement | null>(null)
 
@@ -37,7 +40,6 @@ export const MobilenetPlayground = () => {
     ready: tfReady,
     loadingModel: tfLoading,
     predicting: tfPredicting,
-    prediction: tfPrediction,
     predictFromImage: tfPredictFromImage,
     topK: tfTopK,
   } = useTensorflowMobilenetModel(tensorflowbackend)
@@ -46,7 +48,6 @@ export const MobilenetPlayground = () => {
     ready: webdnnReady,
     loadingModel: webdnnLoading,
     predicting: webdnnPredicting,
-    prediction: webdnnPrediction,
     predictFromImage: webdnnPredictFromImage,
     topK: webdnnTopK,
   } = useWebDnnMobilenetModel(webdnnBackend)
@@ -55,7 +56,6 @@ export const MobilenetPlayground = () => {
     ready: onnxReady,
     loadingModel: onnxLoading,
     predicting: onnxPredicting,
-    prediction: onnxPrediction,
     predictFromImage: onnxPredictFromImage,
     topK: onnxTopK,
   } = useOnnxMobilenetModel()
@@ -64,40 +64,24 @@ export const MobilenetPlayground = () => {
     if (imgEl === null) return
     setRunningAll(true)
 
-    try {
-      const tfRow = await runMeasured(
-        'TF',
-        tensorflowbackend,
-        () => tfPredictFromImage(imgEl, MAX_K),
-        (res) => (typeof res === 'string' ? res : null)
-      )
-      setRows((r) => [tfRow, ...r])
+    const tfData = await tfPredictFromImage(imgEl, MAX_K)
+    const onnxData = await onnxPredictFromImage(imgEl, MAX_K)
+    const webdnnData = await webdnnPredictFromImage(imgEl, MAX_K)
 
-      const onnxRow = await runMeasured(
-        'ONNX',
-        'wasm',
-        () => onnxPredictFromImage(imgEl, MAX_K),
-        (res) => (typeof res === 'string' ? res : null)
-      )
-      setRows((r) => [onnxRow, ...r])
+    showErrors([
+      { result: tfData, context: 'TensorFlow.js' },
+      { result: onnxData, context: 'ONNX Runtime' },
+      { result: webdnnData, context: 'WebDNN' },
+    ])
 
-      const webdnnRow = await runMeasured(
-        'WebDNN',
-        webdnnBackend,
-        () => webdnnPredictFromImage(imgEl, MAX_K),
-        (res) => (typeof res === 'string' ? res : null)
-      )
-      setRows((r) => [webdnnRow, ...r])
-    } catch (e: any) {
-      const msg = String(e?.message ?? e)
-      if (msg.includes('Operator implementation for Clip')) {
-        alert(' Operator implementation for Clip, opset=13 does not exist.')
-      } else {
-        alert(`Error during prediction: ${msg}`)
-      }
-    } finally {
-      setRunningAll(false)
-    }
+    const newRows: BenchmarkRow[] = [
+      predictResultToBenchmarkRow(tfData, tensorflowbackend, 'TF'),
+      predictResultToBenchmarkRow(onnxData, 'wasm', 'ONNX'),
+      predictResultToBenchmarkRow(webdnnData, webdnnBackend, 'WebDNN'),
+    ]
+
+    setRows((r) => [...newRows, ...r])
+    setRunningAll(false)
   }
 
   const isButtonDisabled =
@@ -124,7 +108,13 @@ export const MobilenetPlayground = () => {
         <header className="space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight">Mobilenet v2 model benchmark</h1>
           <p className="text-sm text-muted-foreground">
-            Lorem ipsum dolor, sit amet consectetur adipisicing elit. Natus, officia.
+            Import an image from your device or provide an image URL, then compare predictions and
+            performance across TensorFlow, ONNX, and WebDNN models directly in the browser.
+            <br />
+            <strong>Note:</strong> WebDNN currently does{' '}
+            <strong>not support the MobileNet model</strong>. Results from WebDNN will still appear
+            in the table for performance comparison, but no prediction will be generated due to
+            library limitations.
           </p>
         </header>
 

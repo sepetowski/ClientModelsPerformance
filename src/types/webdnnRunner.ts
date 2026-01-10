@@ -1,7 +1,7 @@
-import type { AvaibleBackendType } from './avaibleBackend'
+import type { AvaibleWebdnnBackendType } from './avaibleBackend'
 
 export interface UseWebDnnModelRunnerConfig {
-  backend: AvaibleBackendType
+  backend: AvaibleWebdnnBackendType
   modelDir: string
 }
 

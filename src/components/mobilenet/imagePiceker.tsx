@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
 import { Separator } from '../ui/separator'
+import { toast } from 'sonner'
 
 interface Props {
   onImageLoaded?: (img: HTMLImageElement | null) => void
@@ -46,11 +47,24 @@ export const ImagePiceker = ({ onImageLoaded }: Props) => {
     setPreviewSrc(null)
     onImageLoaded?.(null)
   }
+
   async function urlToBlobObjectUrl(url: string) {
-    const res = await fetch(url, { mode: 'cors' })
-    if (!res.ok) throw new Error('Failed to fetch image')
-    const blob = await res.blob()
-    return URL.createObjectURL(blob)
+    try {
+      const res = await fetch(url)
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`)
+      }
+
+      const blob = await res.blob()
+      return URL.createObjectURL(blob)
+    } catch (err) {
+      toast.error('Failed to load image from URL.', {
+        description:
+          'They might be CORS restrictions or the URL is invalid. Please try another URL.',
+      })
+      return null
+    }
   }
 
   function onImgLoad() {

@@ -1,13 +1,15 @@
-export type BenchmarkRow = {
+import type { TimeProcess } from './PredictResult'
+
+export interface BenchmarkRow {
   id: string
   ts: number
   model: 'TF' | 'ONNX' | 'WebDNN'
   backend: string
-  durationMs: number
+  durationMs: TimeProcess
   prediction: string | null
 }
 
-export type Stats = {
+export interface Stats {
   n: number
   med: number | null
   mean: number | null

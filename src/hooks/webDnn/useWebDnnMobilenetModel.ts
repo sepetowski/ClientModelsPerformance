@@ -1,101 +1,155 @@
-import { useEffect, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useWebDnnModelRunner } from './useWebDnnModelRunner'
 import { imageElementToImageData } from '@/lib/imageElementToImageData'
 import { preprocessMobilenetV2FromImageData } from '@/lib/preprocessMobilenetV2'
 import type { AvaibleWebdnnBackendType } from '@/types/avaibleBackend'
-import type { MobilenetModelResult, MobilenetTopItem } from '@/types/mobilenetModelResult'
-
-declare const WebDNN: any
+import type {
+  MobilenetModelResult,
+  MobilenetTopItem,
+  PredictFromImageResult,
+} from '@/types/mobilenetModelResult'
+import { useLabels } from '../useLabels'
 
 export const useWebDnnMobilenetModel = (
   backend: AvaibleWebdnnBackendType
 ): MobilenetModelResult => {
-  const { runner, backendReady, loadingModel } = useWebDnnModelRunner({
-    backend,
-    modelDir: '/models/onxx/mobilenet/',
-  })
+  const options = useMemo(() => ({ backend, modelDir: '/models/onxx/mobilenet/' }), [backend])
 
-  const [labels, setLabels] = useState<string[]>([])
+  const { runner, backendReady, loadingModel } = useWebDnnModelRunner(options)
+  const { data: labels } = useLabels('/labels/mobilenet/labels.txt')
+
   const [predicting, setPredicting] = useState(false)
-  const [prediction, setPrediction] = useState<string | null>(null)
   const [topK, setTopK] = useState<MobilenetTopItem[]>([])
 
-  useEffect(() => {
-    const loadLabels = async () => {
-      try {
-        const res = await fetch('/labels/mobilenet/labels.txt')
-        const text = await res.text()
-        const parsed = text
-          .split(/\r?\n/)
-          .map((l) => l.trim().replace(/_/g, ' '))
-          .filter(Boolean)
+  const predictFromImage = async (
+    img: HTMLImageElement | null,
+    k = 5
+  ): Promise<PredictFromImageResult> => {
+    let preprocessMs = 0
+    let inferenceMs = 0
+    let postprocessMs = 0
 
-        setLabels(parsed)
-      } catch (err) {
-        console.error('Failed to load MobileNet labels', err)
-        setLabels([])
+    const tTotal0 = performance.now()
+
+    if (!runner || !img || labels?.length === 0) {
+      return {
+        prediction: null,
+        topK: [],
+        hasError: true,
+        errorMessage: 'Model not ready',
+        timeProcess: {
+          preprocessMs: 0,
+          inferenceMs: 0,
+          postprocessMs: 0,
+          totalMs: performance.now() - tTotal0,
+        },
       }
     }
-
-    loadLabels()
-  }, [])
-
-  const predictFromImage = async (img: HTMLImageElement | null, k = 5): Promise<string | null> => {
-    if (!runner || !img || labels.length === 0) return null
 
     setPredicting(true)
 
     try {
       if (!img.complete || img.naturalWidth === 0) {
-        setPrediction(null)
         setTopK([])
-        return null
+        return {
+          prediction: null,
+          topK: [],
+          hasError: true,
+          errorMessage: 'Image not loaded',
+          timeProcess: {
+            preprocessMs: 0,
+            inferenceMs: 0,
+            postprocessMs: 0,
+            totalMs: performance.now() - tTotal0,
+          },
+        }
       }
 
-      const imageData = imageElementToImageData(img)
-      const processed = preprocessMobilenetV2FromImageData(imageData, 224)
+      let inputTensor: any
+      let probs: Float32Array | null = null
 
-      const inputTensor = new WebDNN.CPUTensor(
-        [1, processed.height, processed.width, 3],
-        'float32',
-        processed.data
-      )
+      // -------- preprocess --------
+      const tPre0 = performance.now()
+      try {
+        const imageData = imageElementToImageData(img)
+        const processed = preprocessMobilenetV2FromImageData(imageData, 224)
 
-      const [output] = await runner.run([inputTensor])
-      const probs = output.data as Float32Array
-
-      const kk = Math.max(1, Math.min(k, probs.length))
-      const items: MobilenetTopItem[] = []
-
-      for (let i = 0; i < probs.length; i++) {
-        items.push({
-          index: i,
-          prob: probs[i],
-          label: labels[i] ?? `class_${i}`,
-        })
+        inputTensor = new WebDNN.CPUTensor(
+          [1, processed.height, processed.width, 3],
+          'float32',
+          processed.data
+        )
+      } finally {
+        preprocessMs = performance.now() - tPre0
       }
 
-      items.sort((a, b) => b.prob - a.prob)
-      const best = items.slice(0, kk)
+      // -------- inference --------
+      const tInf0 = performance.now()
+      try {
+        const [output] = await runner.run([inputTensor])
+        probs = output.data as Float32Array
+      } finally {
+        inferenceMs = performance.now() - tInf0
+      }
 
-      setTopK(best)
-      const top1 = best[0]?.label ?? null
-      setPrediction(top1)
+      if (!probs) throw new Error('Inference failed (no output)')
 
-      console.log('WebDNN top1:', best[0])
-      return top1
-    } catch (e) {
-      throw e
+      // -------- postprocess --------
+      const tPost0 = performance.now()
+      try {
+        const kk = Math.max(1, Math.min(k, probs.length))
+        const items: MobilenetTopItem[] = []
+
+        for (let i = 0; i < probs.length; i++) {
+          items.push({
+            index: i,
+            prob: probs[i],
+            label: labels?.[i] ?? `class_${i}`,
+          })
+        }
+
+        items.sort((a, b) => b.prob - a.prob)
+        const best = items.slice(0, kk)
+
+        setTopK(best)
+
+        return {
+          prediction: best[0]?.label ?? null,
+          topK: best,
+          hasError: false,
+          errorMessage: null,
+          timeProcess: {
+            preprocessMs,
+            inferenceMs,
+            postprocessMs: performance.now() - tPost0,
+            totalMs: performance.now() - tTotal0,
+          },
+        }
+      } finally {
+        postprocessMs = performance.now() - tPost0
+      }
+    } catch (e: any) {
+      return {
+        prediction: null,
+        topK: [],
+        hasError: true,
+        errorMessage: String(e?.message ?? e),
+        timeProcess: {
+          preprocessMs,
+          inferenceMs,
+          postprocessMs,
+          totalMs: performance.now() - tTotal0,
+        },
+      }
     } finally {
       setPredicting(false)
     }
   }
 
   return {
-    ready: backendReady && labels.length > 0,
+    ready: backendReady && (labels?.length ?? 0) > 0,
     loadingModel,
     predicting,
-    prediction,
     topK,
     predictFromImage,
   }

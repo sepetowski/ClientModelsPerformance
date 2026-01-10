@@ -1,103 +1,163 @@
-import { useEffect, useState } from 'react'
+import { useMemo, useState } from 'react'
 import * as tf from '@tensorflow/tfjs'
 import { useTensorflowModelRunner } from './useTensorflowModelRunner'
 import { imageElementToImageData } from '@/lib/imageElementToImageData'
 import { preprocessMobilenetV2FromImageData } from '@/lib/preprocessMobilenetV2'
 import type { AvaibleTensorflowBackendType } from '@/types/avaibleBackend'
-import type { MobilenetModelResult, MobilenetTopItem } from '@/types/mobilenetModelResult'
+import type {
+  MobilenetModelResult,
+  MobilenetTopItem,
+  PredictFromImageResult,
+} from '@/types/mobilenetModelResult'
+import { useLabels } from '../useLabels'
 
 export const useTensorflowMobilenetModel = (
   backend: AvaibleTensorflowBackendType
 ): MobilenetModelResult => {
-  const { model, backendReady, loadingModel } = useTensorflowModelRunner({
-    backend,
-    modelUrl: '/models/tensorflowjs/mobilenet/model.json',
-  })
+  const options = useMemo(
+    () => ({ backend, modelUrl: '/models/tensorflowjs/mobilenet/model.json' }),
+    [backend]
+  )
 
-  const [labels, setLabels] = useState<string[]>([])
+  const { model, backendReady, loadingModel } = useTensorflowModelRunner(options)
+
+  const { data: labels } = useLabels('/labels/mobilenet/labels.txt')
   const [predicting, setPredicting] = useState(false)
-  const [prediction, setPrediction] = useState<string | null>(null)
   const [topK, setTopK] = useState<MobilenetTopItem[]>([])
 
-  useEffect(() => {
-    const loadLabels = async () => {
-      try {
-        const res = await fetch('/labels/mobilenet/labels.txt')
-        const text = await res.text()
-        const parsed = text
-          .split('\n')
-          .map((l) => l.trim().replace(/_/g, ' '))
-          .filter(Boolean)
+  const predictFromImage = async (
+    img: HTMLImageElement | null,
+    k = 5
+  ): Promise<PredictFromImageResult> => {
+    let preprocessMs = 0
+    let inferenceMs = 0
+    let postprocessMs = 0
 
-        setLabels(parsed)
-      } catch (err) {
-        console.error('Failed to load ImageNet labels', err)
+    const tTotal0 = performance.now()
+
+    if (!model || !img || labels?.length === 0) {
+      return {
+        prediction: null,
+        topK: [],
+        hasError: true,
+        errorMessage: 'Model not ready',
+        timeProcess: {
+          preprocessMs: 0,
+          inferenceMs: 0,
+          postprocessMs: 0,
+          totalMs: performance.now() - tTotal0,
+        },
       }
     }
 
-    loadLabels()
-  }, [])
-
-  const predictFromImage = async (img: HTMLImageElement | null, k = 5): Promise<string | null> => {
-    if (!model || !img || labels.length === 0) return null
-
     setPredicting(true)
+
+    let input: tf.Tensor | null = null
+    let output: tf.Tensor | null = null
 
     try {
       if (!img.complete || img.naturalWidth === 0) {
-        setPrediction(null)
         setTopK([])
-        return null
+        return {
+          prediction: null,
+          topK: [],
+          hasError: true,
+          errorMessage: 'Image not loaded',
+          timeProcess: {
+            preprocessMs: 0,
+            inferenceMs: 0,
+            postprocessMs: 0,
+            totalMs: performance.now() - tTotal0,
+          },
+        }
       }
 
-      const imageData = imageElementToImageData(img)
+      let probs: Float32Array | null = null
 
-      const processed = preprocessMobilenetV2FromImageData(imageData, 224)
-      const input = tf.tensor4d(
-        processed.data,
-        [1, processed.height, processed.width, 3],
-        'float32'
-      )
+      // -------- preprocess --------
+      const tPre0 = performance.now()
+      try {
+        const imageData = imageElementToImageData(img)
+        const processed = preprocessMobilenetV2FromImageData(imageData, 224)
 
-      const output = model.predict(input) as tf.Tensor
-      const probs = await output.data()
-
-      input.dispose()
-      output.dispose()
-
-      const kk = Math.max(1, Math.min(k, probs.length))
-      const items: MobilenetTopItem[] = []
-
-      for (let i = 0; i < probs.length; i++) {
-        items.push({
-          index: i,
-          prob: probs[i],
-          label: labels[i] ?? `class_${i}`,
-        })
+        input = tf.tensor4d(processed.data, [1, processed.height, processed.width, 3], 'float32')
+      } finally {
+        preprocessMs = performance.now() - tPre0
       }
 
-      items.sort((a, b) => b.prob - a.prob)
-      const best = items.slice(0, kk)
+      // -------- inference (predict + readback) --------
+      const tInf0 = performance.now()
+      try {
+        output = model.predict(input!) as tf.Tensor
+        probs = (await output.data()) as Float32Array
+      } finally {
+        inferenceMs = performance.now() - tInf0
+      }
 
-      setTopK(best)
+      if (!probs) throw new Error('Inference failed (no output)')
 
-      const top1 = best[0]?.label ?? null
-      setPrediction(top1)
+      // -------- postprocess --------
+      const tPost0 = performance.now()
+      let best: MobilenetTopItem[] = []
+      let top1: string | null = null
 
-      console.log('TF top1:', best[0])
-      return top1
-    } catch (e) {
-      throw e
+      try {
+        const kk = Math.max(1, Math.min(k, probs.length))
+        const items: MobilenetTopItem[] = []
+
+        for (let i = 0; i < probs.length; i++) {
+          items.push({
+            index: i,
+            prob: probs[i],
+            label: labels?.[i] ?? `class_${i}`,
+          })
+        }
+
+        items.sort((a, b) => b.prob - a.prob)
+        best = items.slice(0, kk)
+
+        setTopK(best)
+        top1 = best[0]?.label ?? null
+      } finally {
+        postprocessMs = performance.now() - tPost0
+      }
+
+      return {
+        prediction: top1,
+        topK: best,
+        hasError: false,
+        errorMessage: null,
+        timeProcess: {
+          preprocessMs,
+          inferenceMs,
+          postprocessMs,
+          totalMs: performance.now() - tTotal0,
+        },
+      }
+    } catch (e: any) {
+      return {
+        prediction: null,
+        topK: [],
+        hasError: true,
+        errorMessage: String(e?.message ?? e),
+        timeProcess: {
+          preprocessMs,
+          inferenceMs,
+          postprocessMs,
+          totalMs: performance.now() - tTotal0,
+        },
+      }
     } finally {
+      if (input) input.dispose()
+      if (output) output.dispose()
       setPredicting(false)
     }
   }
 
   return {
-    ready: backendReady,
+    ready: backendReady && (labels?.length ?? 0) > 0,
     loadingModel,
     predicting,
-    prediction,
     topK,
     predictFromImage,
   }
